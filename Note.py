@@ -1,6 +1,6 @@
 import numpy as np
 import sounddevice as sd
-from utils import REFERENCE_OCTAVE, FLAT_KEY
+from utils import REFERENCE_OCTAVE, FLAT_KEY, normalize_waveform
 
 class Note:
     def __init__(self, note="C", octave=4, duration=0.5, delay=0):
@@ -36,5 +36,7 @@ class Note:
     def play(self, sample_rate=44100):
         """Play the note."""
         waveform = self.get_note_waveform(sample_rate)
-        sd.play(waveform, samplerate=sample_rate)
+        # Normalize waveform to avoid clipping
+        normalized_waveform = normalize_waveform(waveform)
+        sd.play(normalized_waveform, samplerate=sample_rate)
         sd.wait()
