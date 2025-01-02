@@ -1,3 +1,6 @@
+# Note.py
+# Define the Note class to represent a musical note and play it using sounddevice.
+
 import numpy as np
 import sounddevice as sd
 

@@ -1,3 +1,6 @@
+# main.py
+# Define the main script to test the music classes.
+
 from Drone import Drone
 from Note import Note
 from sound_utils import play_chord

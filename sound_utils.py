@@ -1,3 +1,6 @@
+# sound_utils.py
+# Define sound-related utility functions.
+
 import numpy as np
 import sounddevice as sd
 

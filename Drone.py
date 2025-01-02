@@ -1,3 +1,6 @@
+# Drone.py
+# Define the Drone class to play a drone note in multiple octaves.
+
 from Note import Note
 from sound_utils import play_chord
 

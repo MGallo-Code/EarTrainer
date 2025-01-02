@@ -1,3 +1,6 @@
+# music_utils.py
+# Define music-related constants and functions.
+
 # Define base frequencies for reference octave (C4 to B4)
 REFERENCE_OCTAVE = {
     "C": 261.63, "C#": 277.18, "D": 293.66, "D#": 311.13,
