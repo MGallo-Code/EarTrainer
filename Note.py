@@ -1,6 +1,8 @@
 import numpy as np
 import sounddevice as sd
-from utils import REFERENCE_OCTAVE, FLAT_KEY, normalize_waveform
+
+from music_utils import REFERENCE_OCTAVE, FLAT_KEY
+from sound_utils import normalize_waveform
 
 class Note:
     def __init__(self, note="C", octave=4, duration=0.5, delay=0):
@@ -8,10 +10,13 @@ class Note:
         self.octave = octave
         self.duration = duration
         self.delay = delay
+        # Calculate frequency of the note
         self.frequency = self.get_frequency()
     
     def get_frequency(self):
-        """Calculate the frequency of the note."""
+        """
+        Calculate the frequency of the note based on the note name and octave.
+        """
         note_name = self.note
         # Convert flat notes to sharp notes
         if note_name in FLAT_KEY:
@@ -25,7 +30,11 @@ class Note:
         return base_freq * (2 ** octave_offset)
     
     def get_note_waveform(self, sample_rate=44100):
-        """Generate a sine wave for the note."""
+        """
+        Generate a sine wave for the note.
+
+        :param sample_rate: Sample rate in Hz (default is 44100).
+        """
         delay_samples = int(sample_rate * self.delay)
         delay_waveform = np.zeros(delay_samples)
         t = np.linspace(0, self.duration, int(sample_rate * self.duration), False)
@@ -34,7 +43,11 @@ class Note:
         return np.concatenate([delay_waveform, waveform])
 
     def play(self, sample_rate=44100):
-        """Play the note."""
+        """
+        Play the note using sounddevice.
+        
+        :param sample_rate: Sample rate in Hz (default is 44100).
+        """
         waveform = self.get_note_waveform(sample_rate)
         # Normalize waveform to avoid clipping
         normalized_waveform = normalize_waveform(waveform)
