@@ -13,7 +13,7 @@ def normalize_waveform(waveform, target_amplitude=32767):
     # Avoid division by zero
     if max_amplitude == 0:
         return waveform
-    return (waveform / max_amplitude * target_amplitude).astype(np.int16)
+    return (waveform / max_amplitude * target_amplitude)
 
 def play_chord(notes, sample_rate=44100):
     """
@@ -30,6 +30,6 @@ def play_chord(notes, sample_rate=44100):
     for wf in waveforms:
         combined_waveform[:len(wf)] += wf
 
-    normalized_chord = normalize_waveform(combined_waveform)
+    normalized_chord = normalize_waveform(combined_waveform).astype(np.int16)
     sd.play(normalized_chord, samplerate=sample_rate)
     sd.wait()

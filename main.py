@@ -8,8 +8,13 @@ from music_utils import (
 )
 
 if __name__ == "__main__":
+    # Testing Note Volume
+    Note("C", volume=0.1).play()
+    Note("C", volume=0.5).play()
+    Note("C", volume=1).play()
+
     # Play drone
-    Drone("C").play()
+    Drone("C", volume=1).play()
 
     # Play a major scale
     # play_scale(scale_intervals=MAJOR_SCALE_INTERVALS, start_note="F", octave=4)

@@ -5,9 +5,10 @@ from music_utils import REFERENCE_OCTAVE, FLAT_KEY
 from sound_utils import normalize_waveform
 
 class Note:
-    def __init__(self, note="C", octave=4, duration=0.5, delay=0):
+    def __init__(self, note="C", octave=4, volume=0.5, duration=0.5, delay=0):
         self.note = note
         self.octave = octave
+        self.volume = volume
         self.duration = duration
         self.delay = delay
         # Calculate frequency of the note
@@ -39,8 +40,11 @@ class Note:
         delay_waveform = np.zeros(delay_samples)
         t = np.linspace(0, self.duration, int(sample_rate * self.duration), False)
         waveform = np.sin(2 * np.pi * self.frequency * t)
-        waveform *= 0.5  # Scale amplitude to avoid excessive loudness
-        return np.concatenate([delay_waveform, waveform])
+        # Normalize waveform to avoid clipping
+        normalized_wave = normalize_waveform(waveform)
+        # Apply volume after normalization
+        normalized_wave *= self.volume
+        return np.concatenate([delay_waveform, normalized_wave]).astype(np.int16)
 
     def play(self, sample_rate=44100):
         """
@@ -49,7 +53,5 @@ class Note:
         :param sample_rate: Sample rate in Hz (default is 44100).
         """
         waveform = self.get_note_waveform(sample_rate)
-        # Normalize waveform to avoid clipping
-        normalized_waveform = normalize_waveform(waveform)
-        sd.play(normalized_waveform, samplerate=sample_rate)
+        sd.play(waveform, samplerate=sample_rate)
         sd.wait()
