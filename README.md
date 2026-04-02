@@ -1,6 +1,6 @@
 # EarTrainer
 
-EarTrainer is a Python-based ear training application designed to help musicians develop relative pitch skills. It features multiple interval quiz modes, flexible difficulty, and an interface that uses typed commands to navigate and guess intervals.
+Designed to help myself in developing relative pitch skills. It has multiple interval quiz modes, flexible difficulty, and an interface that uses typed commands to navigate and guess intervals.
 
 ## Table of Contents
 1. [Overview](#overview)
