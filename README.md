@@ -1,5 +1,6 @@
 # EarTrainer
 
+## Motivation 
 Designed to help myself in developing relative pitch skills. It has multiple interval quiz modes, flexible difficulty, and an interface that uses typed commands to navigate and guess intervals.
 
 ## Table of Contents
