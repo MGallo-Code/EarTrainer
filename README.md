@@ -35,7 +35,7 @@ EarTrainer helps you practice recognizing intervals by ear. The program plays tw
 	- A main menu allows you to select quiz modes or exit.
 	- You can keep playing rounds until you decide to return to the main menu or exit.
 
-## Installation
+## Quick Start
 
 1. Clone or Download the repository:
 
