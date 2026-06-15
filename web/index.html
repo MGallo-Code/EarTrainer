@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loop - Play-by-Ear Trainer (Phase 0)</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1>Loop <span class="tag">Phase 0 prototype</span></h1>
+    <p class="subtitle">Functional ear training: hear it in a key, then <strong>find it by ear</strong> and play it back. A real curriculum with spaced repetition and adaptive difficulty.</p>
+  </header>
+
+  <div id="status" class="status status--off">Checking for MIDI keyboard&hellip;</div>
+
+  <main>
+    <section class="panel curriculum">
+      <div class="curriculum-head">
+        <h2>Curriculum</h2>
+        <button id="resetBtn" class="btn btn--ghost" title="Clear all saved progress">Reset progress</button>
+      </div>
+      <div id="levels" class="levels"></div>
+    </section>
+
+    <section class="panel controls">
+      <div class="field">
+        <label for="keySelect">Key</label>
+        <select id="keySelect">
+          <option value="random" selected>Random each round</option>
+          <option value="0">C major</option>
+          <option value="2">D major</option>
+          <option value="4">E major</option>
+          <option value="5">F major</option>
+          <option value="7">G major</option>
+          <option value="9">A major</option>
+          <option value="11">B major</option>
+        </select>
+      </div>
+      <button id="startBtn" class="btn btn--primary">Start level</button>
+    </section>
+
+    <section class="panel progress-panel">
+      <div class="progress-row">
+        <div class="progress-block">
+          <label>Level mastery <span id="masteryPct">0%</span></label>
+          <div class="bar"><div id="masteryBar" class="bar-fill"></div></div>
+          <p id="masteryDetail" class="progress-detail">Pick a level to begin.</p>
+        </div>
+        <div class="progress-block">
+          <label>Recent accuracy <span id="rollingPct">--</span> <span class="target-note">target ~85%</span></label>
+          <div class="bar"><div id="rollingBar" class="bar-fill bar-fill--alt"></div></div>
+          <p id="leitnerDetail" class="progress-detail">Spaced-repetition boxes appear here.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel stage">
+      <p id="prompt" class="prompt">Choose a level above and press <strong>Start level</strong>. I will set the key with a cadence, then play something. Find it by ear and play it back.</p>
+      <div id="feedback" class="feedback" aria-live="polite"></div>
+      <div class="stage-actions">
+        <button id="replayKeyBtn" class="btn" disabled>Replay key</button>
+        <button id="hearAgainBtn" class="btn" disabled>Hear it again</button>
+        <button id="redoBtn" class="btn" disabled>Redo attempt</button>
+        <button id="revealBtn" class="btn" disabled>Reveal</button>
+        <button id="nextBtn" class="btn btn--primary" disabled>Next</button>
+      </div>
+    </section>
+
+    <section class="panel scoreboard">
+      <div class="score"><span id="accuracy">0%</span><label>Session accuracy</label></div>
+      <div class="score"><span id="streak">0</span><label>Streak</label></div>
+      <div class="score"><span id="best">0</span><label>Best streak</label></div>
+      <div class="score"><span id="count">0</span><label>Items</label></div>
+    </section>
+
+    <section class="panel keyboard-panel">
+      <div id="keyboard" class="keyboard" aria-label="On-screen piano"></div>
+      <p class="hint">No keyboard? Click the keys, or use computer keys:
+        <code>Z S X D C V G B H N J M</code> (lower octave) and
+        <code>Q 2 W 3 E R 5 T 6 Y 7 U</code> (upper octave).</p>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" aria-live="polite"></div>
+
+  <footer class="app-footer">
+    <p>Grading is by scale degree (any octave of the right note counts; exact octave noted). Spaced repetition uses the Leitner system; difficulty targets the 85% rule. Sound is a built-in synth for this prototype; smplr Steinway samples are the planned upgrade. See BUILD-NOTES.md.</p>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
