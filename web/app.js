@@ -46,6 +46,7 @@
   // ---------- persistence ----------
   var STORE_KEY = "loop_progress_v1";
   var progress = loadProgress();
+  ensureMeta();
 
   function loadProgress() {
     try {
@@ -62,6 +63,21 @@
       progress.levels[id] = { boxes: {}, attempts: 0, correct: 0, recent: [] };
     }
     return progress.levels[id];
+  }
+  // Backfill daily-streak + funnel state on older saves (migration-safe).
+  function ensureMeta() {
+    if (!progress.daily) progress.daily = {};
+    var d = progress.daily;
+    if (d.lastDay === undefined) d.lastDay = null;
+    if (typeof d.streak !== "number") d.streak = 0;
+    if (typeof d.best !== "number") d.best = 0;
+    if (typeof d.freezes !== "number") d.freezes = 2;   // two grace days by default
+    if (typeof d.goalTarget !== "number") d.goalTarget = 5; // low default per retention research
+    if (d.todayDay === undefined) d.todayDay = null;
+    if (typeof d.todayCount !== "number") d.todayCount = 0;
+    if (typeof d.goalMetToday !== "boolean") d.goalMetToday = false;
+    if (!progress.funnel) progress.funnel = { firstVisit: null, events: [] };
+    if (!Array.isArray(progress.funnel.events)) progress.funnel.events = [];
   }
 
   // ---------- state ----------
@@ -170,7 +186,11 @@
      "replayKeyBtn", "hearAgainBtn", "redoBtn", "submitBtn", "revealBtn", "nextBtn",
      "accuracy", "streak", "best", "count", "keyboard",
      "masteryPct", "masteryBar", "masteryDetail", "rollingPct", "rollingBar", "leitnerDetail",
-     "toast", "soundState"].forEach(function (id) { els[id] = $(id); });
+     "toast", "soundState",
+     "streakNum", "goalNum", "goalTarget", "goalRing", "recapBtn",
+     "recapOverlay", "recapMain", "recapTitle", "recapAcc", "recapRounds", "recapStreak", "recapDetail",
+     "duetBtn", "recapClose", "waitlistPanel", "waitlistEmail", "waitlistSubmit", "waitlistBack", "waitlistThanks"
+    ].forEach(function (id) { els[id] = $(id); });
     setSoundNote();
   }
   function setStatus(text, on) { els.status.textContent = text; els.status.className = "status " + (on ? "status--on" : "status--off"); }
@@ -183,6 +203,60 @@
     els.nextBtn.disabled = !o.next;
   }
   function showSubmit(on) { if (els.submitBtn) els.submitBtn.style.display = on ? "" : "none"; }
+
+  // ---------- daily streak / funnel / recap ----------
+  function todayKey() {
+    var d = new Date(), m = String(d.getMonth() + 1), day = String(d.getDate());
+    if (m.length < 2) m = "0" + m;
+    if (day.length < 2) day = "0" + day;
+    return d.getFullYear() + "-" + m + "-" + day;
+  }
+  function logEvent(name) {
+    progress.funnel.events.push({ name: name, day: todayKey(), t: Date.now() });
+    if (progress.funnel.events.length > 500) progress.funnel.events = progress.funnel.events.slice(-500);
+    try { console.log("[funnel]", name); } catch (e) { /* ignore */ }
+    saveProgress();
+  }
+  function logEventOnce(name) {
+    for (var i = 0; i < progress.funnel.events.length; i++) if (progress.funnel.events[i].name === name) return;
+    logEvent(name);
+  }
+  function recordPracticeToday() {
+    var today = todayKey(), d = progress.daily;
+    if (d.todayDay !== today) { d.todayDay = today; d.todayCount = 0; d.goalMetToday = false; }
+    d.todayCount++;
+    var s = C.updateStreak({ lastDay: d.lastDay, streak: d.streak, best: d.best, freezes: d.freezes }, today);
+    d.lastDay = s.lastDay; d.streak = s.streak; d.best = s.best; d.freezes = s.freezes;
+    var justMet = false;
+    if (!d.goalMetToday && d.todayCount >= d.goalTarget) { d.goalMetToday = true; justMet = true; }
+    return justMet;
+  }
+  function renderDaily() {
+    if (!els.streakNum) return;
+    var d = progress.daily, today = todayKey();
+    var count = (d.todayDay === today) ? d.todayCount : 0;
+    els.streakNum.textContent = d.streak || 0;
+    els.goalNum.textContent = count;
+    els.goalTarget.textContent = d.goalTarget;
+    els.goalRing.style.width = Math.min(100, Math.round(count / d.goalTarget * 100)) + "%";
+  }
+  function showWaitlist(on) {
+    els.recapMain.style.display = on ? "none" : "";
+    els.waitlistPanel.style.display = on ? "" : "none";
+  }
+  function renderRecap(auto) {
+    var acc = session.total ? Math.round(session.correct / session.total * 100) : 0;
+    els.recapAcc.textContent = acc + "%";
+    els.recapRounds.textContent = session.total;
+    els.recapStreak.textContent = progress.daily.streak || 0;
+    els.recapTitle.textContent = auto ? "Daily goal complete!" : "Session recap";
+    var lv = LEVELS[currentLevelIdx];
+    var detail = "You practiced " + lv.name + ": " + session.correct + "/" + session.total + " correct.";
+    if (progress.daily.goalMetToday) detail += " Daily goal met (" + progress.daily.goalTarget + " items).";
+    els.recapDetail.textContent = detail;
+  }
+  function openRecap(auto) { renderRecap(auto); showWaitlist(false); els.recapOverlay.style.display = "flex"; }
+  function closeRecap() { els.recapOverlay.style.display = "none"; }
   function toast(msg) {
     els.toast.textContent = msg; els.toast.classList.add("show");
     setTimeout(function () { els.toast.classList.remove("show"); }, 2600);
@@ -521,6 +595,12 @@
     if (usesLeitner(lv)) lp.boxes[currentItem] = C.promoteBox(lp.boxes[currentItem], allCorrect, MAX_BOX);
     else { lp.recent.push(allCorrect); if (lp.recent.length > 200) lp.recent = lp.recent.slice(-200); }
     saveProgress(); updateScoreboard(); checkUnlock();
+    // daily-return streak / goal + activation funnel + end-of-session recap
+    logEventOnce("first-round");
+    if (allCorrect) logEventOnce("first-correct");
+    var goalJustMet = recordPracticeToday();
+    renderDaily(); saveProgress();
+    if (goalJustMet) openRecap(true);
   }
 
   function showAttemptFeedback(allCorrect, marks, detail) {
@@ -638,9 +718,12 @@
   }
 
   function resetProgress() {
-    progress = { version: 1, unlocked: 1, levels: {} };
+    var funnel = progress.funnel; // keep funnel history across a progress reset
+    progress = { version: 1, unlocked: 1, levels: {}, funnel: funnel };
+    ensureMeta();
     saveProgress();
     selectLevel(0);
+    renderDaily();
     toast("Progress reset.");
   }
 
@@ -709,6 +792,19 @@
     });
     els.revealBtn.addEventListener("click", reveal);
     els.nextBtn.addEventListener("click", function () { newRound(false); });
+    // daily bar + recap + fake-door wiring
+    renderDaily();
+    if (!progress.funnel.firstVisit) { progress.funnel.firstVisit = todayKey(); logEvent("first-visit"); }
+    els.recapBtn.addEventListener("click", function () { openRecap(false); });
+    els.duetBtn.addEventListener("click", function () { logEvent("duet-click"); showWaitlist(true); });
+    els.recapClose.addEventListener("click", closeRecap);
+    els.waitlistBack.addEventListener("click", function () { showWaitlist(false); });
+    els.waitlistSubmit.addEventListener("click", function () {
+      var email = (els.waitlistEmail.value || "").trim();
+      logEvent(email ? "waitlist-signup" : "waitlist-empty");
+      els.waitlistThanks.style.display = "";
+    });
+    els.recapOverlay.addEventListener("click", function (e) { if (e.target === els.recapOverlay) closeRecap(); });
     initComputerKeys();
     initMIDI();
   }

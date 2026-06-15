@@ -67,8 +67,15 @@ These are flagged by the research itself as undocumented and needing our own tun
   and ii-V-I (7ths). Progression engine generalized to a `prog` degree-array + `sevenths`
   flag. All theory accuracy-verified (`../research/`) and unit-tested with explicit
   pitch-class sets. 12-bar blues intentionally skipped (too long for playback).
+- **Retention + validation slice (research-ranked "build now"):** daily-return streak
+  (decoupled from a low daily goal, with grace/freeze days) + activation funnel logging
+  (first-visit -> first-round -> first-correct -> duet-click -> waitlist) + an
+  end-of-session recap card with an in-app **duet fake-door** (waitlist). This is the
+  cheap validation slice gating the duet render engine (NOT built). Pure streak/day math
+  is unit-tested; the flow is Playwright-verified. State migration-safe (`ensureMeta`).
 - **Tests: `node --test` (built-in, zero deps).** `npm test` from `web/` runs the suite
-  (58 tests): theory (triads, 7th chords, diatonic qualities, Axis), pitch-class-set grading
+  (68 tests): theory (triads, 7th chords, diatonic qualities, Axis), daily-streak math,
+  pitch-class-set grading
   (inversion/octave tolerant, extra/missing/dupe, empty-target guard), chord-capture
   grouping, melody generation, Leitner, mastery, octave-fold. UI/integration stays on
   Playwright (no useless DOM-glue unit tests).
@@ -90,5 +97,5 @@ cd ~/Documents/Projects/EarTrainer/web && python3 -m http.server 8123
 
 ## Test
 ```bash
-cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 58 tests
+cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 68 tests
 ```

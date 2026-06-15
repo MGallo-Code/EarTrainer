@@ -105,6 +105,42 @@
     return Math.min(a / acc, 1) * attemptFactor;
   }
 
+  // ---------- daily streak / retention (pure; app supplies local day keys "YYYY-MM-DD") ----------
+  function daysBetween(aKey, bKey) {
+    var a = aKey.split("-"), b = bKey.split("-");
+    var ta = Date.UTC(+a[0], +a[1] - 1, +a[2]);
+    var tb = Date.UTC(+b[0], +b[1] - 1, +b[2]);
+    return Math.round((tb - ta) / 86400000);
+  }
+  // Advance a daily-return streak. prev = {lastDay, streak, best, freezes}. Idempotent within a day.
+  // A "freeze" covers one missed day; consecutive days advance; a too-large gap resets to 1.
+  function updateStreak(prev, todayKey) {
+    prev = prev || {};
+    var best = prev.best || 0, freezes = prev.freezes || 0;
+    if (!prev.lastDay) {
+      return { lastDay: todayKey, streak: 1, best: Math.max(best, 1), freezes: freezes, usedFreeze: false, changed: true };
+    }
+    var gap = daysBetween(prev.lastDay, todayKey);
+    if (gap <= 0) { // same day (or clock skew) -> no change
+      return { lastDay: prev.lastDay, streak: prev.streak || 0, best: best, freezes: freezes, usedFreeze: false, changed: false };
+    }
+    var missed = gap - 1, streak, used = false;
+    if (missed <= 0) {
+      streak = (prev.streak || 0) + 1;
+    } else if (freezes >= missed) {
+      freezes -= missed; streak = (prev.streak || 0) + 1; used = true;
+    } else {
+      streak = 1;
+    }
+    return { lastDay: todayKey, streak: streak, best: Math.max(best, streak), freezes: freezes, usedFreeze: used, changed: true };
+  }
+  // Order items weakest-first (lowest Leitner box first); stable for ties.
+  function weakestFirst(items, boxes) {
+    return items.map(function (it, i) { return { it: it, box: (boxes && boxes[it]) || 1, i: i }; })
+      .sort(function (a, b) { return a.box - b.box || a.i - b.i; })
+      .map(function (x) { return x.it; });
+  }
+
   // ---------- grading (notes / melodies) ----------
   function gradeNote(played, target) {
     if (played == null) return { correct: false, exact: false };
@@ -234,6 +270,7 @@
     degreeMasteryFraction: degreeMasteryFraction, isSeqMastered: isSeqMastered,
     seqMasteryFraction: seqMasteryFraction,
     gradeNote: gradeNote, gradeSequence: gradeSequence,
+    daysBetween: daysBetween, updateStreak: updateStreak, weakestFirst: weakestFirst,
     triad: triad, diatonicQuality: diatonicQuality, romanNumeral: romanNumeral,
     diatonicTriad: diatonicTriad, axisChords: axisChords,
     SEVENTH_INTERVALS: SEVENTH_INTERVALS, DIATONIC_SEVENTHS: DIATONIC_SEVENTHS,

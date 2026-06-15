@@ -147,6 +147,40 @@ select {
 }
 .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* daily bar */
+.daily-bar {
+  max-width: 760px; margin: 0 auto 16px; display: flex; align-items: center; gap: 16px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 999px;
+  padding: 8px 16px; box-shadow: var(--shadow);
+}
+.db-item { display: flex; align-items: center; gap: 6px; font-size: 0.92rem; }
+.db-item strong { color: var(--accent-2); font-size: 1.1rem; }
+.db-label { color: var(--muted); font-size: 0.8rem; }
+.db-goal { gap: 8px; }
+.db-ring { width: 90px; height: 8px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 999px; overflow: hidden; }
+.db-ring-fill { display: block; height: 100%; width: 0%; background: linear-gradient(90deg, #f6b53c 0%, var(--good) 100%); transition: width 0.35s ease; }
+.daily-bar .btn--ghost { margin-left: auto; padding: 6px 14px; }
+
+/* overlay + recap card */
+.overlay {
+  position: fixed; inset: 0; background: rgba(8, 10, 24, 0.72); backdrop-filter: blur(3px);
+  display: flex; align-items: center; justify-content: center; z-index: 50; padding: 20px;
+}
+.recap-card { max-width: 460px; width: 100%; text-align: center; }
+.recap-card h2 { margin: 0 0 16px; font-size: 1.5rem; }
+.recap-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.rstat span { display: block; font-size: 1.9rem; font-weight: 800; color: var(--accent-2); }
+.rstat label { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; }
+.recap-detail { color: var(--ink); font-size: 1rem; line-height: 1.5; margin: 0 0 18px; }
+.recap-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+.recap-foot { color: var(--muted); font-size: 0.82rem; margin: 16px 0 0; line-height: 1.5; }
+.waitlist-row { display: flex; gap: 8px; margin: 16px 0 10px; }
+.waitlist-row input {
+  flex: 1; background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
+  border-radius: 10px; padding: 11px 12px; font-size: 1rem;
+}
+.waitlist-thanks { color: var(--good); font-weight: 700; margin: 6px 0; }
+
 .feedback .marks { letter-spacing: 4px; font-size: 1.5rem; }
 .mark-ok { color: var(--good); }
 .mark-bad { color: var(--bad); }

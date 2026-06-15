@@ -14,6 +14,15 @@
 
   <div id="status" class="status status--off">Checking for MIDI keyboard&hellip;</div>
 
+  <div id="dailyBar" class="daily-bar">
+    <span class="db-item">🔥 <strong id="streakNum">0</strong> <span class="db-label">day streak</span></span>
+    <span class="db-item db-goal">
+      <span class="db-label">Today</span> <strong id="goalNum">0</strong>/<span id="goalTarget">5</span>
+      <span class="db-ring"><span id="goalRing" class="db-ring-fill"></span></span>
+    </span>
+    <button id="recapBtn" class="btn btn--ghost">Recap</button>
+  </div>
+
   <main>
     <section class="panel curriculum">
       <div class="curriculum-head">
@@ -83,6 +92,35 @@
         <code>Q 2 W 3 E R 5 T 6 Y 7 U</code> (upper octave).</p>
     </section>
   </main>
+
+  <div id="recapOverlay" class="overlay" style="display:none">
+    <div class="card recap-card">
+      <div id="recapMain">
+        <h2 id="recapTitle">Session recap</h2>
+        <div class="recap-stats">
+          <div class="rstat"><span id="recapAcc">0%</span><label>Accuracy</label></div>
+          <div class="rstat"><span id="recapRounds">0</span><label>Items</label></div>
+          <div class="rstat"><span id="recapStreak">0</span><label>Day streak</label></div>
+        </div>
+        <p id="recapDetail" class="recap-detail"></p>
+        <div class="recap-actions">
+          <button id="duetBtn" class="btn btn--primary">Duet this &#9658;</button>
+          <button id="recapClose" class="btn">Keep practicing</button>
+        </div>
+        <p class="recap-foot">Record &amp; layer your take, then challenge someone to find the next part by ear.</p>
+      </div>
+      <div id="waitlistPanel" style="display:none">
+        <h2>Record &amp; Duet is coming soon</h2>
+        <p>Capture your layer and invite others to add the next part by ear. Want early access?</p>
+        <div class="waitlist-row">
+          <input id="waitlistEmail" type="email" placeholder="you@email.com" autocomplete="email" />
+          <button id="waitlistSubmit" class="btn btn--primary">Notify me</button>
+        </div>
+        <p id="waitlistThanks" class="waitlist-thanks" style="display:none">Thanks! You're on the list.</p>
+        <button id="waitlistBack" class="btn btn--ghost">Back</button>
+      </div>
+    </div>
+  </div>
 
   <div id="toast" class="toast" aria-live="polite"></div>
 
