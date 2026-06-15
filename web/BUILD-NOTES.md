@@ -62,8 +62,13 @@ These are flagged by the research itself as undocumented and needing our own tun
 
 - **Pure logic extracted to `core.js`** (works in browser + Node) so it is unit-testable;
   `app.js` is now DOM/audio/MIDI glue that calls it.
+- **Harmony extension (L13-L16):** 50s progression (I-vi-IV-V), 7th-chord quality
+  (maj7/dom7/m7/m7b5; dim7 deferred, not diatonic to major), diatonic 7ths (Imaj7-viiø7),
+  and ii-V-I (7ths). Progression engine generalized to a `prog` degree-array + `sevenths`
+  flag. All theory accuracy-verified (`../research/`) and unit-tested with explicit
+  pitch-class sets. 12-bar blues intentionally skipped (too long for playback).
 - **Tests: `node --test` (built-in, zero deps).** `npm test` from `web/` runs the suite
-  (50 tests): theory (triads, diatonic qualities, Axis), pitch-class-set grading
+  (58 tests): theory (triads, 7th chords, diatonic qualities, Axis), pitch-class-set grading
   (inversion/octave tolerant, extra/missing/dupe, empty-target guard), chord-capture
   grouping, melody generation, Leitner, mastery, octave-fold. UI/integration stays on
   Playwright (no useless DOM-glue unit tests).
@@ -85,5 +90,5 @@ cd ~/Documents/Projects/EarTrainer/web && python3 -m http.server 8123
 
 ## Test
 ```bash
-cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 50 tests
+cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 58 tests
 ```

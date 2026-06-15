@@ -148,6 +148,28 @@
     return AXIS_DEGREES.map(function (di) { return diatonicTriad(tonicMidi, di); });
   }
 
+  // 7th chords (semitone offsets from root). half-dim = m7b5; fully-dim = dim7.
+  var SEVENTH_INTERVALS = { maj7: [0, 4, 7, 11], dom7: [0, 4, 7, 10], min7: [0, 3, 7, 10], m7b5: [0, 3, 6, 10], dim7: [0, 3, 6, 9] };
+  var DIATONIC_SEVENTHS = ["maj7", "min7", "min7", "maj7", "dom7", "min7", "m7b5"]; // I..vii in major
+  function seventh(rootMidi, quality) {
+    return SEVENTH_INTERVALS[quality].map(function (iv) { return rootMidi + iv; });
+  }
+  function diatonicSeventhQuality(degIdx) { return DIATONIC_SEVENTHS[((degIdx % 7) + 7) % 7]; }
+  // Root-position diatonic 7th: stack scale members at indices deg, deg+2, deg+4, deg+6.
+  function diatonicSeventh(tonicMidi, degIdx) {
+    var notes = [];
+    for (var k = 0; k < 8; k += 2) {
+      var idx = degIdx + k;
+      var oct = Math.floor(idx / 7);
+      notes.push(tonicMidi + MAJOR_SCALE[((idx % 7) + 7) % 7] + 12 * oct);
+    }
+    return notes;
+  }
+  // Generalized progression builder: degree indices -> chords (triads, or 7ths if useSevenths).
+  function progressionChords(tonicMidi, degIdxs, useSevenths) {
+    return degIdxs.map(function (di) { return useSevenths ? diatonicSeventh(tonicMidi, di) : diatonicTriad(tonicMidi, di); });
+  }
+
   // distinct pitch classes, sorted ascending
   function pcSet(notes) {
     var seen = {}, out = [];
@@ -214,6 +236,9 @@
     gradeNote: gradeNote, gradeSequence: gradeSequence,
     triad: triad, diatonicQuality: diatonicQuality, romanNumeral: romanNumeral,
     diatonicTriad: diatonicTriad, axisChords: axisChords,
+    SEVENTH_INTERVALS: SEVENTH_INTERVALS, DIATONIC_SEVENTHS: DIATONIC_SEVENTHS,
+    seventh: seventh, diatonicSeventhQuality: diatonicSeventhQuality,
+    diatonicSeventh: diatonicSeventh, progressionChords: progressionChords,
     pcSet: pcSet, gradeChord: gradeChord, gradeProgression: gradeProgression,
     groupNotesByGap: groupNotesByGap
   };

@@ -31,6 +31,18 @@ SplendidGrandPiano (with synth fallback). No new dependencies.
 
 L8-L11 use Leitner spaced repetition (per-item boxes); L12 uses rolling accuracy.
 
+### Harmony extension (shipped)
+
+- **L13 - 50s progression:** I-vi-IV-V (triads).
+- **L14 - 7th chord quality:** maj7 / dom7 / m7 / m7b5 (dim7 deferred; not diatonic to
+  major). Key-agnostic, like triad quality.
+- **L15 - Diatonic 7ths:** Imaj7, ii7, iii7, IVmaj7, V7, vi7, viiø7.
+- **L16 - ii-V-I (7ths):** ii7-V7-Imaj7, gated after the 7th-quality module.
+
+The progression engine is generalized: a level carries `prog` (0-based degree indices)
+and an optional `sevenths` flag. Axis=[0,4,5,3], 50s=[0,5,3,4], ii-V-I=[1,4,0]+sevenths.
+12-bar blues was evaluated and skipped (12 chords is too long for play-back).
+
 ## Capture model (the key design decision)
 
 A **chord** = the set of notes entered within a short gap window, finalized by either

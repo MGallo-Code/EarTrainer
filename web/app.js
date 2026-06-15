@@ -26,7 +26,11 @@
     { id: "l9", name: "Primary chords", meta: "I IV V", type: "chord", itemKind: "degree", items: [0, 3, 4] },
     { id: "l10", name: "Diatonic chords", meta: "I-vi", type: "chord", itemKind: "degree", items: [0, 1, 2, 3, 4, 5] },
     { id: "l11", name: "Full diatonic", meta: "+ vii°", type: "chord", itemKind: "degree", items: [0, 1, 2, 3, 4, 5, 6] },
-    { id: "l12", name: "Axis progression", meta: "I-V-vi-IV", type: "progression" }
+    { id: "l12", name: "Axis progression", meta: "I-V-vi-IV", type: "progression", prog: [0, 4, 5, 3] },
+    { id: "l13", name: "50s progression", meta: "I-vi-IV-V", type: "progression", prog: [0, 5, 3, 4] },
+    { id: "l14", name: "7th chord quality", meta: "maj7 / 7 / m7 / m7b5", type: "chord", itemKind: "quality7", items: ["maj7", "dom7", "min7", "m7b5"] }, // dim7 deferred (not diatonic to major)
+    { id: "l15", name: "Diatonic 7ths", meta: "Imaj7-viiø7", type: "chord", itemKind: "degree7", items: [0, 1, 2, 3, 4, 5, 6] },
+    { id: "l16", name: "ii-V-I (7ths)", meta: "ii7 V7 Imaj7", type: "progression", prog: [1, 4, 0], sevenths: true }
   ];
   var MAX_BOX = 5;          // Leitner boxes 1..5
   var MASTER_BOX = 4;       // an item is "mastered" at box >= this
@@ -206,8 +210,11 @@
   }
   // human label for a Leitner item (degree offset, chord degree index, or quality)
   function itemLabel(level, item) {
-    if (level.type === "chord" && level.itemKind === "quality") return item; // "maj"/"min"
-    if (level.type === "chord" && level.itemKind === "degree") return C.romanNumeral(item);
+    if (level.type === "chord") {
+      if (level.itemKind === "quality" || level.itemKind === "quality7") return item; // "maj" / "maj7"
+      if (level.itemKind === "degree7") return seventhRoman(item);
+      return C.romanNumeral(item); // diatonic triad degree
+    }
     return DEGREE_LABEL[item] || NOTE_NAMES[(tonicMidi + item) % 12]; // degree levels
   }
 
@@ -326,7 +333,7 @@
             .map(function (d) { return tonicMidi + d; });
   }
   // Quality recognition (L8) is key-agnostic, so it skips the cadence; everything else primes the key.
-  function needsKeyContext(lv) { return !(lv.type === "chord" && lv.itemKind === "quality"); }
+  function needsKeyContext(lv) { return !(lv.type === "chord" && (lv.itemKind === "quality" || lv.itemKind === "quality7")); }
   function listenPrompt(lv) {
     if (lv.type === "melody") return "Play back all <strong>" + targetSeq.length + " notes</strong> by ear, in order.";
     if (lv.type === "progression") return "Play back all <strong>" + targetChords.length + " chords</strong> in order. Submit each chord.";
@@ -346,14 +353,17 @@
     } else if (lv.type === "chord") {
       currentItem = leitnerPick(lv);
       if (lv.itemKind === "quality") {
-        var root = KEYBOARD_LOW + Math.floor(Math.random() * 12); // any root in the lower octave
-        targetChords = [C.triad(root, currentItem)];
+        targetChords = [C.triad(KEYBOARD_LOW + Math.floor(Math.random() * 12), currentItem)];
+      } else if (lv.itemKind === "quality7") {
+        targetChords = [C.seventh(KEYBOARD_LOW + Math.floor(Math.random() * 12), currentItem)];
+      } else if (lv.itemKind === "degree7") {
+        targetChords = [C.diatonicSeventh(tonicMidi, currentItem)];
       } else {
         targetChords = [C.diatonicTriad(tonicMidi, currentItem)];
       }
       targetSeq = targetChords[0].slice();
     } else if (lv.type === "progression") {
-      targetChords = C.axisChords(tonicMidi);
+      targetChords = C.progressionChords(tonicMidi, lv.prog, !!lv.sevenths);
       targetSeq = targetChords.reduce(function (a, c) { return a.concat(c); }, []);
     }
   }
@@ -469,13 +479,18 @@
   // ---------- shared scoring / feedback ----------
   function markSpan(ok) { return '<span class="' + (ok ? "mark-ok" : "mark-bad") + '">' + (ok ? "✓" : "✗") + "</span>"; }
   function qualityWord(q) { return q === "maj" ? "major" : q === "min" ? "minor" : "diminished"; }
+  function qualityWord7(q) { return q === "maj7" ? "major 7th" : q === "dom7" ? "dominant 7th" : q === "min7" ? "minor 7th" : q === "m7b5" ? "half-diminished 7th" : "diminished 7th"; }
+  var SEVENTH_ROMAN = ["Imaj7", "ii7", "iii7", "IVmaj7", "V7", "vi7", "viiø7"];
+  function seventhRoman(deg) { return SEVENTH_ROMAN[deg]; }
   function degOrName(m) { return DEGREE_LABEL[m - tonicMidi] || NOTE_NAMES[m % 12]; }
-  function axisRoman() { return C.AXIS_DEGREES.map(C.romanNumeral).join("-"); }
+  function progLabels(lv) { return lv.prog.map(function (di) { return lv.sevenths ? seventhRoman(di) : C.romanNumeral(di); }); }
   function chordCount() { return targetChords ? targetChords.length : 1; }
   function chordName() {
     var lv = LEVELS[currentLevelIdx];
     var rootName = NOTE_NAMES[targetChords[0][0] % 12];
     if (lv.itemKind === "quality") return rootName + " " + qualityWord(currentItem);
+    if (lv.itemKind === "quality7") return rootName + " " + qualityWord7(currentItem);
+    if (lv.itemKind === "degree7") return seventhRoman(currentItem) + " (" + rootName + " " + qualityWord7(C.diatonicSeventhQuality(currentItem)) + ")";
     return C.romanNumeral(currentItem) + " (" + rootName + " " + qualityWord(C.diatonicQuality(currentItem)) + ")";
   }
   function degreeDetail(allCorrect, anyOctaveOff) {
@@ -493,7 +508,7 @@
     return correct ? ("Correct! It was " + name + ".") : ("It was " + name + ". Listen and try again, or Reveal.");
   }
   function progressionDetail(correct) {
-    var names = axisRoman();
+    var names = progLabels(LEVELS[currentLevelIdx]).join("-");
     return correct ? ("Nice! Progression was " + names + ".") : ("Progression was " + names + ". Listen and try again, or Reveal.");
   }
 
@@ -575,7 +590,7 @@
 
   function answerText(lv) {
     if (lv.type === "progression") {
-      return axisRoman() + "  (" + targetChords.map(function (ch) { return NOTE_NAMES[ch[0] % 12]; }).join(" ") + ")";
+      return progLabels(lv).join("-") + "  (" + targetChords.map(function (ch) { return NOTE_NAMES[ch[0] % 12]; }).join(" ") + ")";
     }
     if (lv.type === "chord") return chordName();
     var degSeq = targetSeq.map(degOrName).join(" ");
