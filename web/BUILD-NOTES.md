@@ -73,6 +73,10 @@ These are flagged by the research itself as undocumented and needing our own tun
   end-of-session recap card with an in-app **duet fake-door** (waitlist). This is the
   cheap validation slice gating the duet render engine (NOT built). Pure streak/day math
   is unit-tested; the flow is Playwright-verified. State migration-safe (`ensureMeta`).
+- **Validation landing page + waitlist:** `web/landing/` (standalone smoke-test page)
+  plus a shared `config.js` waitlist endpoint (Formspree-ready, localStorage demo
+  fallback). The landing page and the in-app fake-door both POST signups with UTM
+  attribution. Run sheet + go/kill gate: `../research/execution/14-validation-runsheet.md`.
 - **First-run onboarding:** a one-screen welcome (what Loop is, how to play, the daily
   habit) that launches the first round on "Start practicing"; shown once, persisted.
 - **Session settings + block-chord playback fix:** a Settings panel (daily goal,
@@ -80,7 +84,7 @@ These are flagged by the research itself as undocumented and needing our own tun
   chord/progression levels sound BLOCK chords (they were arpeggiating the flattened
   notes). App-level + Playwright-verified.
 - **Tests: `node --test` (built-in, zero deps).** `npm test` from `web/` runs the suite
-  (68 tests): theory (triads, 7th chords, diatonic qualities, Axis), daily-streak math,
+  (72 tests): theory (triads, 7th chords, diatonic qualities, Axis), daily-streak math,
   pitch-class-set grading
   (inversion/octave tolerant, extra/missing/dupe, empty-target guard), chord-capture
   grouping, melody generation, Leitner, mastery, octave-fold. UI/integration stays on
@@ -103,5 +107,5 @@ cd ~/Documents/Projects/EarTrainer/web && python3 -m http.server 8123
 
 ## Test
 ```bash
-cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 68 tests
+cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 72 tests
 ```

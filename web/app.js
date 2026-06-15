@@ -288,6 +288,21 @@
     els.settingsOverlay.style.display = "flex";
   }
   function closeSettings() { els.settingsOverlay.style.display = "none"; }
+  // Send a waitlist signup to the configured endpoint (config.js); localStorage fallback in demo mode.
+  function submitWaitlist(email) {
+    var endpoint = (window.LOOP_CONFIG && window.LOOP_CONFIG.WAITLIST_ENDPOINT) || "";
+    var payload = { email: email, source: "in-app", ts: new Date().toISOString() };
+    if (progress.attribution) for (var k in progress.attribution) payload[k] = progress.attribution[k];
+    try {
+      var key = "loop_waitlist", arr = JSON.parse(localStorage.getItem(key) || "[]");
+      arr.push(payload); localStorage.setItem(key, JSON.stringify(arr));
+    } catch (e) { /* ignore */ }
+    if (endpoint) {
+      return fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json", "Accept": "application/json" }, body: JSON.stringify(payload) })
+        .then(function (r) { return { ok: r.ok }; }).catch(function () { return { ok: false }; });
+    }
+    return Promise.resolve({ demo: true });
+  }
   function showOnboarding() { els.onboardOverlay.style.display = "flex"; }
   function finishOnboarding() {
     progress.onboarded = true; saveProgress();
@@ -832,13 +847,24 @@
     // daily bar + recap + fake-door wiring
     renderDaily();
     if (!progress.funnel.firstVisit) { progress.funnel.firstVisit = todayKey(); logEvent("first-visit"); }
+    if (!progress.attribution) { progress.attribution = C.parseQuery(window.location.search); saveProgress(); }
     els.recapBtn.addEventListener("click", function () { openRecap(false); });
     els.duetBtn.addEventListener("click", function () { logEvent("duet-click"); showWaitlist(true); });
     els.recapClose.addEventListener("click", closeRecap);
     els.waitlistBack.addEventListener("click", function () { showWaitlist(false); });
     els.waitlistSubmit.addEventListener("click", function () {
       var email = (els.waitlistEmail.value || "").trim();
-      logEvent(email ? "waitlist-signup" : "waitlist-empty");
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        logEvent("waitlist-empty");
+        els.waitlistThanks.style.color = "#fb7185";
+        els.waitlistThanks.textContent = "Please enter a valid email.";
+        els.waitlistThanks.style.display = "";
+        return;
+      }
+      logEvent("waitlist-signup");
+      submitWaitlist(email);
+      els.waitlistThanks.style.color = "";
+      els.waitlistThanks.textContent = "Thanks! You're on the list.";
       els.waitlistThanks.style.display = "";
     });
     els.recapOverlay.addEventListener("click", function (e) { if (e.target === els.recapOverlay) closeRecap(); });

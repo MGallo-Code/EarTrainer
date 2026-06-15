@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Loop - Figure out songs by ear</title>
+  <meta name="description" content="Loop turns the part you work out on your keyboard into a clean, shareable take, then challenges someone to find the next layer by ear." />
+  <link rel="stylesheet" href="landing.css" />
+</head>
+<body>
+  <header class="lp-nav">
+    <span class="lp-logo">Loop</span>
+    <a class="lp-nav-cta" href="#join">Join the waitlist</a>
+  </header>
+
+  <main>
+    <section class="lp-hero">
+      <h1>Figure out songs <span class="accent">by ear</span>.</h1>
+      <p class="lp-sub">Loop turns the part you work out on your keyboard into a clean, shareable take, then challenges someone to find the next layer by ear. Functional ear training that actually transfers to playing.</p>
+      <form class="lp-form" id="heroForm">
+        <input type="email" id="heroEmail" placeholder="you@email.com" autocomplete="email" required />
+        <button type="submit" class="btn btn--primary">Join the waitlist</button>
+      </form>
+      <p class="lp-form-note" id="heroNote"></p>
+      <div class="lp-clip" aria-label="demo clip placeholder">
+        <span>&#9654;</span>
+        <p>Demo duet clip</p>
+        <small>(drop a hand-made clip / GIF here for the test)</small>
+      </div>
+    </section>
+
+    <section class="lp-steps">
+      <h2>How it works</h2>
+      <div class="lp-step-grid">
+        <div class="lp-step"><span class="lp-step-n">1</span><h3>Play it by ear</h3><p>Work out a bassline or melody on the MIDI keyboard you already own.</p></div>
+        <div class="lp-step"><span class="lp-step-n">2</span><h3>We clean it up</h3><p>Your take is captured as exact MIDI and rendered to real piano, tightened so it sounds good.</p></div>
+        <div class="lp-step"><span class="lp-step-n">3</span><h3>Duet it</h3><p>Post it as an open challenge. The next player finds the next part by ear.</p></div>
+      </div>
+    </section>
+
+    <section class="lp-who">
+      <h2>Who it's for</h2>
+      <p>Adult pop &amp; jazz players who can read music but freeze when asked to just <em>play something by ear</em>. If you want the skill the pros have, Loop drills it the way it's actually used.</p>
+    </section>
+
+    <section class="lp-join" id="join">
+      <h2>Be first to try it</h2>
+      <p>It's an early experiment. Join the waitlist and we'll invite you when the duet loop is ready.</p>
+      <form class="lp-form" id="footForm">
+        <input type="email" id="footEmail" placeholder="you@email.com" autocomplete="email" required />
+        <button type="submit" class="btn btn--primary">Join the waitlist</button>
+      </form>
+      <p class="lp-form-note" id="footNote"></p>
+    </section>
+  </main>
+
+  <footer class="lp-foot">
+    <p>Loop - an ear-training experiment. 2026.</p>
+  </footer>
+
+  <script src="../config.js"></script>
+  <script src="../core.js"></script>
+  <script src="landing.js"></script>
+</body>
+</html>

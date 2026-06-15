@@ -134,6 +134,23 @@
     }
     return { lastDay: todayKey, streak: streak, best: Math.max(best, streak), freezes: freezes, usedFreeze: used, changed: true };
   }
+  // Parse a query string ("?a=1&b=2" or "a=1") into an object. Used for UTM attribution.
+  function parseQuery(search) {
+    var out = {};
+    if (!search) return out;
+    var s = search.charAt(0) === "?" ? search.slice(1) : search;
+    if (!s) return out;
+    s.split("&").forEach(function (pair) {
+      if (!pair) return;
+      var idx = pair.indexOf("=");
+      var k = idx < 0 ? pair : pair.slice(0, idx);
+      var v = idx < 0 ? "" : pair.slice(idx + 1);
+      try { k = decodeURIComponent(k.replace(/\+/g, " ")); v = decodeURIComponent(v.replace(/\+/g, " ")); } catch (e) { /* keep raw */ }
+      if (k) out[k] = v;
+    });
+    return out;
+  }
+
   // Order items weakest-first (lowest Leitner box first); stable for ties.
   function weakestFirst(items, boxes) {
     return items.map(function (it, i) { return { it: it, box: (boxes && boxes[it]) || 1, i: i }; })
@@ -271,6 +288,7 @@
     seqMasteryFraction: seqMasteryFraction,
     gradeNote: gradeNote, gradeSequence: gradeSequence,
     daysBetween: daysBetween, updateStreak: updateStreak, weakestFirst: weakestFirst,
+    parseQuery: parseQuery,
     triad: triad, diatonicQuality: diatonicQuality, romanNumeral: romanNumeral,
     diatonicTriad: diatonicTriad, axisChords: axisChords,
     SEVENTH_INTERVALS: SEVENTH_INTERVALS, DIATONIC_SEVENTHS: DIATONIC_SEVENTHS,
