@@ -6,13 +6,10 @@
 (function () {
   "use strict";
 
-  // ---------- music theory ----------
-  var NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  var DEGREE_LABEL = { 0: "1", 2: "2", 4: "3", 5: "4", 7: "5", 9: "6", 11: "7", 12: "1↑" };
-  var SOLFEGE = { 0: "Do", 2: "Re", 4: "Mi", 5: "Fa", 7: "Sol", 9: "La", 11: "Ti", 12: "Do↑" };
-  var KEYBOARD_LOW = 60;   // C4
-  var KEYBOARD_HIGH = 83;  // B5
-  var MAJOR_KEYS = [0, 2, 4, 5, 7, 9, 11];
+  // ---------- core (pure music/logic, shared with Node tests via core.js) ----------
+  var C = window.LoopCore;
+  var NOTE_NAMES = C.NOTE_NAMES, DEGREE_LABEL = C.DEGREE_LABEL, SOLFEGE = C.SOLFEGE;
+  var MAJOR_KEYS = C.MAJOR_KEYS, KEYBOARD_LOW = C.KEYBOARD_LOW, KEYBOARD_HIGH = C.KEYBOARD_HIGH;
 
   // ---------- curriculum (data-driven; values are first-guess defaults, see BUILD-NOTES) ----------
   var LEVELS = [
@@ -66,7 +63,7 @@
     if (!ctx) { var AC = window.AudioContext || window.webkitAudioContext; ctx = new AC(); }
     return ctx;
   }
-  function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  var midiToFreq = C.midiToFreq;
 
   // Sampled Steinway (smplr) with a built-in synth fallback if samples can't load.
   var piano = null, pianoState = "off"; // off | loading | ready | failed
@@ -178,35 +175,13 @@
   function isUnlocked(idx) { return idx < progress.unlocked; }
   function isMastered(level) {
     var lp = levelProgress(level.id);
-    if (level.type === "degree") {
-      for (var i = 0; i < level.degrees.length; i++) {
-        if ((lp.boxes[level.degrees[i]] || 1) < MASTER_BOX) return false;
-      }
-      return true;
-    } else {
-      if (lp.recent.length < MIN_ATTEMPTS) return false;
-      var w = lp.recent.slice(-WINDOW);
-      var c = w.filter(Boolean).length;
-      return (c / w.length) >= MASTERY_ACC;
-    }
+    if (level.type === "degree") return C.isDegreeMastered(lp.boxes, level.degrees, MASTER_BOX);
+    return C.isSeqMastered(lp.recent, WINDOW, MASTERY_ACC, MIN_ATTEMPTS);
   }
   function masteryFraction(level) {
     var lp = levelProgress(level.id);
-    if (level.type === "degree") {
-      var sum = 0;
-      for (var i = 0; i < level.degrees.length; i++) {
-        var b = Math.min(lp.boxes[level.degrees[i]] || 1, MASTER_BOX);
-        sum += (b - 1) / (MASTER_BOX - 1); // box 1 = 0%, box 4 = 100%
-      }
-      return sum / level.degrees.length;
-    } else {
-      if (!lp.recent.length) return 0;
-      var w = lp.recent.slice(-WINDOW);
-      var acc = w.filter(Boolean).length / w.length;
-      // fraction toward the 85% gate, also requiring MIN_ATTEMPTS
-      var attemptFactor = Math.min(lp.recent.length / MIN_ATTEMPTS, 1);
-      return Math.min(acc / MASTERY_ACC, 1) * attemptFactor;
-    }
+    if (level.type === "degree") return C.degreeMasteryFraction(lp.boxes, level.degrees, MASTER_BOX);
+    return C.seqMasteryFraction(lp.recent, WINDOW, MASTERY_ACC, MIN_ATTEMPTS);
   }
 
   function renderLevels() {
@@ -249,9 +224,9 @@
     }
 
     // rolling accuracy
-    var rl = lp.recent.slice(-WINDOW);
-    if (rl.length) {
-      var acc = Math.round((rl.filter(Boolean).length / rl.length) * 100);
+    var ra = C.rollingAccuracy(lp.recent, WINDOW);
+    if (ra != null) {
+      var acc = Math.round(ra * 100);
       els.rollingPct.textContent = acc + "%";
       els.rollingBar.style.width = acc + "%";
     } else {
@@ -261,7 +236,7 @@
   }
 
   // ---------- keyboard rendering ----------
-  function isBlack(m) { var pc = m % 12; return pc === 1 || pc === 3 || pc === 6 || pc === 8 || pc === 10; }
+  var isBlack = C.isBlack;
   function renderKeyboard() {
     var kb = els.keyboard; kb.innerHTML = "";
     var whiteW = 40, blackW = 26, whitesBefore = 0, totalWhites = 0, m;
@@ -318,36 +293,12 @@
   // ---------- round flow ----------
   function leitnerPick(level) {
     var lp = levelProgress(level.id);
-    // weighted random: lower box -> higher weight
-    var weights = level.degrees.map(function (d) { return (MAX_BOX + 1) - (lp.boxes[d] || 1); });
-    var total = weights.reduce(function (a, b) { return a + b; }, 0);
-    var r = Math.random() * total;
-    for (var i = 0; i < level.degrees.length; i++) {
-      r -= weights[i];
-      if (r <= 0) return level.degrees[i];
-    }
-    return level.degrees[level.degrees.length - 1];
+    var weights = C.leitnerWeights(level.degrees, lp.boxes, MAX_BOX);
+    return C.pickWeighted(level.degrees, weights);
   }
   function generateMelody(level) {
-    var degs = level.degrees.slice();
-    var seq = [];
-    var idx = Math.floor(Math.random() * degs.length);
-    seq.push(degs[idx]);
-    for (var n = 1; n < level.length; n++) {
-      if (level.leaps) {
-        var ni = idx;
-        while (ni === idx) ni = Math.floor(Math.random() * degs.length);
-        idx = ni;
-      } else {
-        // stepwise: move +/-1 index, clamp
-        var dir = Math.random() < 0.5 ? -1 : 1;
-        if (idx + dir < 0) dir = 1;
-        if (idx + dir > degs.length - 1) dir = -1;
-        idx = idx + dir;
-      }
-      seq.push(degs[idx]);
-    }
-    return seq.map(function (d) { return tonicMidi + d; });
+    return C.generateMelodyDegrees(level.degrees, level.length, level.leaps)
+            .map(function (d) { return tonicMidi + d; });
   }
 
   function pickTargets() {
@@ -420,15 +371,12 @@
     attempts++;
     var lv = LEVELS[currentLevelIdx];
     var lp = levelProgress(lv.id);
-    var marks = [];
-    var allCorrect = true;
-    var anyOctaveOff = false;
-    for (var i = 0; i < targetSeq.length; i++) {
-      var ok = (playedSeq[i] % 12) === (targetSeq[i] % 12);
-      if (ok && playedSeq[i] !== targetSeq[i]) anyOctaveOff = true;
-      if (!ok) allCorrect = false;
-      marks.push('<span class="' + (ok ? "mark-ok" : "mark-bad") + '">' + (ok ? "✓" : "✗") + "</span>");
-    }
+    var g = C.gradeSequence(playedSeq, targetSeq);
+    var allCorrect = g.allCorrect;
+    var anyOctaveOff = g.anyOctaveOff;
+    var marks = g.marks.map(function (ok) {
+      return '<span class="' + (ok ? "mark-ok" : "mark-bad") + '">' + (ok ? "✓" : "✗") + "</span>";
+    });
 
     // Score the round ONCE, on the first attempt only.
     if (attempts === 1) {
@@ -444,8 +392,7 @@
       // Leitner update (degree levels) on first attempt
       if (lv.type === "degree") {
         var item = targetSeq[0] - tonicMidi;
-        var box = lp.boxes[item] || 1;
-        lp.boxes[item] = allCorrect ? Math.min(box + 1, MAX_BOX) : 1;
+        lp.boxes[item] = C.promoteBox(lp.boxes[item], allCorrect, MAX_BOX);
       } else {
         lp.recent.push(allCorrect);
         if (lp.recent.length > 200) lp.recent = lp.recent.slice(-200);
