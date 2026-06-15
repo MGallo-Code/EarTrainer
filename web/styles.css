@@ -181,6 +181,14 @@ select {
 }
 .waitlist-thanks { color: var(--good); font-weight: 700; margin: 6px 0; }
 
+/* settings */
+.settings-card { max-width: 440px; width: 100%; }
+.settings-card h2 { margin: 0 0 16px; font-size: 1.4rem; }
+.settings-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.settings-row label { color: var(--ink); font-size: 0.98rem; }
+.settings-row select { min-width: 200px; }
+.settings-card .recap-actions { margin-top: 18px; }
+
 .feedback .marks { letter-spacing: 4px; font-size: 1.5rem; }
 .mark-ok { color: var(--good); }
 .mark-bad { color: var(--bad); }

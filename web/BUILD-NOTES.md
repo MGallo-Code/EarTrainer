@@ -73,6 +73,10 @@ These are flagged by the research itself as undocumented and needing our own tun
   end-of-session recap card with an in-app **duet fake-door** (waitlist). This is the
   cheap validation slice gating the duet render engine (NOT built). Pure streak/day math
   is unit-tested; the flow is Playwright-verified. State migration-safe (`ensureMeta`).
+- **Session settings + block-chord playback fix:** a Settings panel (daily goal,
+  full-cadence vs quick-tonic key priming, playback speed; persisted) and a fix so
+  chord/progression levels sound BLOCK chords (they were arpeggiating the flattened
+  notes). App-level + Playwright-verified.
 - **Tests: `node --test` (built-in, zero deps).** `npm test` from `web/` runs the suite
   (68 tests): theory (triads, 7th chords, diatonic qualities, Axis), daily-streak math,
   pitch-class-set grading

@@ -78,6 +78,9 @@
     if (typeof d.goalMetToday !== "boolean") d.goalMetToday = false;
     if (!progress.funnel) progress.funnel = { firstVisit: null, events: [] };
     if (!Array.isArray(progress.funnel.events)) progress.funnel.events = [];
+    if (!progress.settings) progress.settings = {};
+    if (typeof progress.settings.tempo !== "number") progress.settings.tempo = 1;     // playback speed multiplier
+    if (!progress.settings.cadence) progress.settings.cadence = "full";               // "full" cadence or "quick" tonic
   }
 
   // ---------- state ----------
@@ -153,9 +156,10 @@
   function majorTriad(root) { return C.triad(root, "maj"); } // single-source the triad shape via core
   function playChord(midis, when, dur) { for (var i = 0; i < midis.length; i++) playTone(midis[i], when, dur, 0.7); }
 
+  function tempo() { return progress.settings.tempo || 1; } // playback speed multiplier
   // Plays the cadence (full I-IV-V-I) or a short tonic reminder. Returns seconds to completion.
   function playContext(full) {
-    var ac = audio(); var t = ac.currentTime + 0.08; var c = 0.55;
+    var ac = audio(); var t = ac.currentTime + 0.08; var c = 0.55 / tempo();
     if (full) {
       playChord(majorTriad(tonicMidi), t, c); t += c;
       playChord(majorTriad(tonicMidi + 5), t, c); t += c;
@@ -170,10 +174,19 @@
   function playSequence(afterSeconds) {
     var ac = audio();
     var t = ac.currentTime + afterSeconds + 0.2;
-    var noteDur = 0.62;
-    for (var i = 0; i < targetSeq.length; i++) {
-      playTone(targetSeq[i], t, noteDur * 0.92, 0.9);
-      t += noteDur;
+    if (targetChords) {
+      // chord/progression levels: sound each chord as a BLOCK (simultaneous), not an arpeggio
+      var chordDur = 1.15 / tempo();
+      for (var c = 0; c < targetChords.length; c++) {
+        playChord(targetChords[c], t, chordDur * 0.9);
+        t += chordDur;
+      }
+    } else {
+      var noteDur = 0.62 / tempo();
+      for (var i = 0; i < targetSeq.length; i++) {
+        playTone(targetSeq[i], t, noteDur * 0.92, 0.9);
+        t += noteDur;
+      }
     }
     return (t - ac.currentTime);
   }
@@ -189,7 +202,8 @@
      "toast", "soundState",
      "streakNum", "goalNum", "goalTarget", "goalRing", "recapBtn",
      "recapOverlay", "recapMain", "recapTitle", "recapAcc", "recapRounds", "recapStreak", "recapDetail",
-     "duetBtn", "recapClose", "waitlistPanel", "waitlistEmail", "waitlistSubmit", "waitlistBack", "waitlistThanks"
+     "duetBtn", "recapClose", "waitlistPanel", "waitlistEmail", "waitlistSubmit", "waitlistBack", "waitlistThanks",
+     "settingsBtn", "settingsOverlay", "settingsClose", "setGoal", "setCadence", "setTempo"
     ].forEach(function (id) { els[id] = $(id); });
     setSoundNote();
   }
@@ -257,6 +271,13 @@
   }
   function openRecap(auto) { renderRecap(auto); showWaitlist(false); els.recapOverlay.style.display = "flex"; }
   function closeRecap() { els.recapOverlay.style.display = "none"; }
+  function openSettings() {
+    els.setGoal.value = String(progress.daily.goalTarget);
+    els.setCadence.value = progress.settings.cadence;
+    els.setTempo.value = String(progress.settings.tempo);
+    els.settingsOverlay.style.display = "flex";
+  }
+  function closeSettings() { els.settingsOverlay.style.display = "none"; }
   function toast(msg) {
     els.toast.textContent = msg; els.toast.classList.add("show");
     setTimeout(function () { els.toast.classList.remove("show"); }, 2600);
@@ -475,7 +496,7 @@
     var lv = LEVELS[currentLevelIdx];
     var keyName = NOTE_NAMES[tonicMidi % 12];
     els.prompt.innerHTML = needsKeyContext(lv) ? ("Key of <strong>" + keyName + " major</strong>. Listen…") : "Listen…";
-    var ctxDur = needsKeyContext(lv) ? playContext(full) : 0;
+    var ctxDur = needsKeyContext(lv) ? playContext(full && progress.settings.cadence === "full") : 0;
     var totalDur = playSequence(ctxDur);
     var myRound = ++roundSeq;
     setTimeout(function () {
@@ -805,6 +826,13 @@
       els.waitlistThanks.style.display = "";
     });
     els.recapOverlay.addEventListener("click", function (e) { if (e.target === els.recapOverlay) closeRecap(); });
+    // settings
+    els.settingsBtn.addEventListener("click", openSettings);
+    els.settingsClose.addEventListener("click", closeSettings);
+    els.settingsOverlay.addEventListener("click", function (e) { if (e.target === els.settingsOverlay) closeSettings(); });
+    els.setGoal.addEventListener("change", function () { progress.daily.goalTarget = parseInt(els.setGoal.value, 10); saveProgress(); renderDaily(); });
+    els.setCadence.addEventListener("change", function () { progress.settings.cadence = els.setCadence.value; saveProgress(); });
+    els.setTempo.addEventListener("change", function () { progress.settings.tempo = parseFloat(els.setTempo.value); saveProgress(); });
     initComputerKeys();
     initMIDI();
   }
@@ -825,6 +853,7 @@
     getTargets: function () { return targetSeq.slice(); },
     getTargetChords: function () { return targetChords ? targetChords.map(function (c) { return c.slice(); }) : null; },
     getCurrentItem: function () { return currentItem; },
+    getSettings: function () { return { goalTarget: progress.daily.goalTarget, cadence: progress.settings.cadence, tempo: progress.settings.tempo }; },
     getTonic: function () { return tonicMidi; },
     getState: function () { return state; },
     getSession: function () { return session; },
