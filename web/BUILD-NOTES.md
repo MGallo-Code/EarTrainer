@@ -58,8 +58,32 @@ These are flagged by the research itself as undocumented and needing our own tun
    `execution/10-critique.md` - out of scope for the drill core, tracked for the duet
    loop and business model.
 
+## Update (2026-06-15): chords + test infrastructure
+
+- **Pure logic extracted to `core.js`** (works in browser + Node) so it is unit-testable;
+  `app.js` is now DOM/audio/MIDI glue that calls it.
+- **Tests: `node --test` (built-in, zero deps).** `npm test` from `web/` runs the suite
+  (50 tests): theory (triads, diatonic qualities, Axis), pitch-class-set grading
+  (inversion/octave tolerant, extra/missing/dupe, empty-target guard), chord-capture
+  grouping, melody generation, Leitner, mastery, octave-fold. UI/integration stays on
+  Playwright (no useless DOM-glue unit tests).
+- **Chord curriculum (L8-L12)** added per the verified accuracy run
+  (`../research/chords/` decisions): triad quality -> primary chords -> diatonic ->
+  +vii° -> Axis progression. Grading by pitch-class set; capture via 75ms MIDI
+  trailing-edge debounce + a Submit button for click/computer input; smplr plays chords
+  (one `start()` per tone at a shared `time`); `piano.ready` (deprecated `.load` fallback).
+- **Code review applied** (multi-agent, adversarial): fixed the orphaned cue-timer
+  (round-token guard so a mid-cue level switch can't wedge/crash the UI), octave-folding
+  of out-of-range chord tones for highlight, empty-target grading guard, and dedupe
+  helpers. Skipped pure-cosmetic nits (inline `noteName` sites, defensive mod-7 guards).
+
 ## How to run
 ```bash
 cd ~/Documents/Projects/EarTrainer/web && python3 -m http.server 8123
 # open http://localhost:8123  (Chrome/Edge for MIDI)
+```
+
+## Test
+```bash
+cd ~/Documents/Projects/EarTrainer/web && npm test   # node --test, 50 tests
 ```

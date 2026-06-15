@@ -19,13 +19,25 @@
     { id: "l4", name: "Pentatonic", meta: "1-2-3-5-6", type: "degree", degrees: [0, 2, 4, 7, 9] },
     { id: "l5", name: "Full Scale", meta: "1-7", type: "degree", degrees: [0, 2, 4, 5, 7, 9, 11] },
     { id: "l6", name: "Melodies: stepwise", meta: "3 notes", type: "melody", degrees: [0, 2, 4, 5, 7, 9, 11], length: 3, leaps: false },
-    { id: "l7", name: "Melodies: leaps", meta: "4 notes", type: "melody", degrees: [0, 2, 4, 5, 7, 9, 11], length: 4, leaps: true }
+    { id: "l7", name: "Melodies: leaps", meta: "4 notes", type: "melody", degrees: [0, 2, 4, 5, 7, 9, 11], length: 4, leaps: true },
+    // Chords (pedagogy order from CHORDS-SPEC.md: quality -> primary -> +minor -> +vii deg -> progression)
+    { id: "l8", name: "Triad quality", meta: "maj / min", type: "chord", itemKind: "quality", items: ["maj", "min"] }, // dim intentionally deferred (opt-in) per verified pedagogy
+
+    { id: "l9", name: "Primary chords", meta: "I IV V", type: "chord", itemKind: "degree", items: [0, 3, 4] },
+    { id: "l10", name: "Diatonic chords", meta: "I-vi", type: "chord", itemKind: "degree", items: [0, 1, 2, 3, 4, 5] },
+    { id: "l11", name: "Full diatonic", meta: "+ vii°", type: "chord", itemKind: "degree", items: [0, 1, 2, 3, 4, 5, 6] },
+    { id: "l12", name: "Axis progression", meta: "I-V-vi-IV", type: "progression" }
   ];
   var MAX_BOX = 5;          // Leitner boxes 1..5
-  var MASTER_BOX = 4;       // a degree item is "mastered" at box >= this
-  var WINDOW = 10;          // rolling window for melody accuracy
+  var MASTER_BOX = 4;       // an item is "mastered" at box >= this
+  var WINDOW = 10;          // rolling window for melody/progression accuracy
   var MASTERY_ACC = 0.85;   // 85% rule
-  var MIN_ATTEMPTS = 10;    // min attempts before a melody level can be mastered
+  var MIN_ATTEMPTS = 10;    // min attempts before a rolling-accuracy level can be mastered
+  var CHORD_WINDOW_MS = 75; // trailing-edge debounce to group simultaneous MIDI notes into a chord
+
+  function levelItems(lv) { return lv.items || lv.degrees || []; }
+  function usesLeitner(lv) { return lv.type === "degree" || lv.type === "chord"; }
+  function isChordType(lv) { return lv.type === "chord" || lv.type === "progression"; }
 
   // ---------- persistence ----------
   var STORE_KEY = "loop_progress_v1";
@@ -52,10 +64,18 @@
   var state = "idle"; // idle | cued | listening | feedback
   var currentLevelIdx = 0;
   var tonicMidi = 60;
-  var targetSeq = [];     // array of midi notes to reproduce
-  var playedSeq = [];     // user's input this attempt
+  var targetSeq = [];     // flattened target notes (for playback/highlight)
+  var targetChords = null;// array of chords (each an array of midi) for chord/progression levels
+  var playedSeq = [];     // user's note input this attempt (note/melody levels)
+  var currentItem = null; // the Leitner item this round (degree offset, quality, or degIdx)
   var attempts = 0;
   var session = { correct: 0, total: 0, streak: 0, best: 0 };
+
+  // chord capture (chord/progression levels)
+  var pendingChord = [];  // notes accumulating into the current chord
+  var playedChords = [];  // finalized chords this attempt
+  var chordTimer = null;
+  var roundSeq = 0;       // invalidates an in-flight cue timer if the level/round changes
 
   // ---------- audio ----------
   var ctx = null;
@@ -78,7 +98,7 @@
     pianoState = "loading"; setSoundNote();
     import("https://esm.sh/smplr").then(function (mod) {
       piano = new mod.SplendidGrandPiano(audio());
-      return piano.load;
+      return piano.ready || piano.load; // v1.0 uses .ready; .load is the deprecated fallback
     }).then(function () {
       pianoState = "ready"; setSoundNote(); toast("Steinway samples loaded.");
     }).catch(function () {
@@ -110,7 +130,7 @@
     }
     playSynth(midi, when, dur, vel);
   }
-  function majorTriad(root) { return [root, root + 4, root + 7]; }
+  function majorTriad(root) { return C.triad(root, "maj"); } // single-source the triad shape via core
   function playChord(midis, when, dur) { for (var i = 0; i < midis.length; i++) playTone(midis[i], when, dur, 0.7); }
 
   // Plays the cadence (full I-IV-V-I) or a short tonic reminder. Returns seconds to completion.
@@ -143,7 +163,7 @@
   var els = {};
   function cacheEls() {
     ["status", "keySelect", "startBtn", "resetBtn", "levels", "prompt", "feedback",
-     "replayKeyBtn", "hearAgainBtn", "redoBtn", "revealBtn", "nextBtn",
+     "replayKeyBtn", "hearAgainBtn", "redoBtn", "submitBtn", "revealBtn", "nextBtn",
      "accuracy", "streak", "best", "count", "keyboard",
      "masteryPct", "masteryBar", "masteryDetail", "rollingPct", "rollingBar", "leitnerDetail",
      "toast", "soundState"].forEach(function (id) { els[id] = $(id); });
@@ -158,6 +178,7 @@
     els.revealBtn.disabled = !o.during;
     els.nextBtn.disabled = !o.next;
   }
+  function showSubmit(on) { if (els.submitBtn) els.submitBtn.style.display = on ? "" : "none"; }
   function toast(msg) {
     els.toast.textContent = msg; els.toast.classList.add("show");
     setTimeout(function () { els.toast.classList.remove("show"); }, 2600);
@@ -175,13 +196,19 @@
   function isUnlocked(idx) { return idx < progress.unlocked; }
   function isMastered(level) {
     var lp = levelProgress(level.id);
-    if (level.type === "degree") return C.isDegreeMastered(lp.boxes, level.degrees, MASTER_BOX);
+    if (usesLeitner(level)) return C.isDegreeMastered(lp.boxes, levelItems(level), MASTER_BOX);
     return C.isSeqMastered(lp.recent, WINDOW, MASTERY_ACC, MIN_ATTEMPTS);
   }
   function masteryFraction(level) {
     var lp = levelProgress(level.id);
-    if (level.type === "degree") return C.degreeMasteryFraction(lp.boxes, level.degrees, MASTER_BOX);
+    if (usesLeitner(level)) return C.degreeMasteryFraction(lp.boxes, levelItems(level), MASTER_BOX);
     return C.seqMasteryFraction(lp.recent, WINDOW, MASTERY_ACC, MIN_ATTEMPTS);
+  }
+  // human label for a Leitner item (degree offset, chord degree index, or quality)
+  function itemLabel(level, item) {
+    if (level.type === "chord" && level.itemKind === "quality") return item; // "maj"/"min"
+    if (level.type === "chord" && level.itemKind === "degree") return C.romanNumeral(item);
+    return DEGREE_LABEL[item] || NOTE_NAMES[(tonicMidi + item) % 12]; // degree levels
   }
 
   function renderLevels() {
@@ -209,18 +236,16 @@
     els.masteryPct.textContent = Math.round(frac * 100) + "%";
     els.masteryBar.style.width = Math.round(frac * 100) + "%";
 
-    if (lv.type === "degree") {
-      var masteredCount = lv.degrees.filter(function (d) { return (lp.boxes[d] || 1) >= MASTER_BOX; }).length;
-      els.masteryDetail.textContent = masteredCount + " / " + lv.degrees.length + " scale degrees mastered (box " + MASTER_BOX + "+)";
-      // leitner distribution
-      var parts = lv.degrees.map(function (d) {
-        var label = DEGREE_LABEL[d] || NOTE_NAMES[(tonicMidi + d) % 12];
-        return label + ":B" + (lp.boxes[d] || 1);
-      });
+    if (usesLeitner(lv)) {
+      var items = levelItems(lv);
+      var noun = lv.type === "chord" ? "chords" : "degrees";
+      var masteredCount = items.filter(function (d) { return (lp.boxes[d] || 1) >= MASTER_BOX; }).length;
+      els.masteryDetail.textContent = masteredCount + " / " + items.length + " " + noun + " mastered (box " + MASTER_BOX + "+)";
+      var parts = items.map(function (d) { return itemLabel(lv, d) + ":B" + (lp.boxes[d] || 1); });
       els.leitnerDetail.textContent = "Leitner boxes - " + parts.join("  ");
     } else {
       els.masteryDetail.textContent = lp.recent.length + " attempts (need " + MIN_ATTEMPTS + "+ at " + Math.round(MASTERY_ACC * 100) + "% to master)";
-      els.leitnerDetail.textContent = "Melody levels use rolling accuracy, not Leitner boxes.";
+      els.leitnerDetail.textContent = "This level uses rolling accuracy, not Leitner boxes.";
     }
 
     // rolling accuracy
@@ -258,13 +283,13 @@
     }
   }
   function bindKey(el, m) {
-    var down = function (ev) { ev.preventDefault(); handleNoteOn(m); };
+    var down = function (ev) { ev.preventDefault(); handleNoteOn(m, "screen"); };
     el.addEventListener("mousedown", down);
     el.addEventListener("touchstart", down, { passive: false });
   }
   function keyEl(m) { return els.keyboard.querySelector('[data-midi="' + m + '"]'); }
   function flashKey(m) {
-    var el = keyEl(m); if (!el) return;
+    var el = keyEl(C.foldToRange(m, KEYBOARD_LOW, KEYBOARD_HIGH)); if (!el) return;
     el.classList.add("active");
     setTimeout(function () { el.classList.remove("active"); }, 220);
   }
@@ -277,14 +302,13 @@
   }
   function highlightTargets() {
     clearTargets();
-    targetSeq.forEach(function (m, i) {
-      var el = keyEl(m); if (!el) return;
+    targetSeq.forEach(function (m) {
+      var el = keyEl(C.foldToRange(m, KEYBOARD_LOW, KEYBOARD_HIGH)); if (!el) return;
       el.classList.add("target");
       if (!el.querySelector(".deg")) {
         var label = document.createElement("span");
         label.className = "deg";
-        var deg = m - tonicMidi;
-        label.textContent = (DEGREE_LABEL[deg] || NOTE_NAMES[m % 12]);
+        label.textContent = degOrName(m);
         el.appendChild(label);
       }
     });
@@ -293,20 +317,44 @@
   // ---------- round flow ----------
   function leitnerPick(level) {
     var lp = levelProgress(level.id);
-    var weights = C.leitnerWeights(level.degrees, lp.boxes, MAX_BOX);
-    return C.pickWeighted(level.degrees, weights);
+    var items = levelItems(level);
+    var weights = C.leitnerWeights(items, lp.boxes, MAX_BOX);
+    return C.pickWeighted(items, weights);
   }
   function generateMelody(level) {
     return C.generateMelodyDegrees(level.degrees, level.length, level.leaps)
             .map(function (d) { return tonicMidi + d; });
   }
+  // Quality recognition (L8) is key-agnostic, so it skips the cadence; everything else primes the key.
+  function needsKeyContext(lv) { return !(lv.type === "chord" && lv.itemKind === "quality"); }
+  function listenPrompt(lv) {
+    if (lv.type === "melody") return "Play back all <strong>" + targetSeq.length + " notes</strong> by ear, in order.";
+    if (lv.type === "progression") return "Play back all <strong>" + targetChords.length + " chords</strong> in order. Submit each chord.";
+    if (lv.type === "chord") return "Play back the <strong>chord</strong> by ear (any inversion), then Submit.";
+    return "Find that note by ear and <strong>play it</strong>.";
+  }
 
   function pickTargets() {
     var lv = LEVELS[currentLevelIdx];
+    currentItem = null;
+    targetChords = null;
     if (lv.type === "degree") {
-      targetSeq = [tonicMidi + leitnerPick(lv)];
-    } else {
+      currentItem = leitnerPick(lv);
+      targetSeq = [tonicMidi + currentItem];
+    } else if (lv.type === "melody") {
       targetSeq = generateMelody(lv);
+    } else if (lv.type === "chord") {
+      currentItem = leitnerPick(lv);
+      if (lv.itemKind === "quality") {
+        var root = KEYBOARD_LOW + Math.floor(Math.random() * 12); // any root in the lower octave
+        targetChords = [C.triad(root, currentItem)];
+      } else {
+        targetChords = [C.diatonicTriad(tonicMidi, currentItem)];
+      }
+      targetSeq = targetChords[0].slice();
+    } else if (lv.type === "progression") {
+      targetChords = C.axisChords(tonicMidi);
+      targetSeq = targetChords.reduce(function (a, c) { return a.concat(c); }, []);
     }
   }
 
@@ -326,150 +374,223 @@
     newRound(true);
   }
 
+  function resetAttemptInput() {
+    playedSeq = []; playedChords = []; pendingChord = []; clearChordTimer();
+  }
+
   function newRound(full) {
     clearTargets();
     setFeedbackHtml("", "neutral");
     if (els.keySelect.value === "random") chooseKey();   // new key each round if random
     pickTargets();
-    playedSeq = [];
+    resetAttemptInput();
     attempts = 0;
     state = "cued";
     setRoundButtons({ during: false, next: false });
-    var keyName = NOTE_NAMES[tonicMidi % 12];
+    showSubmit(false);
     var lv = LEVELS[currentLevelIdx];
-    els.prompt.innerHTML = "Key of <strong>" + keyName + " major</strong>. Listen…";
-    var ctxDur = playContext(full);
+    var keyName = NOTE_NAMES[tonicMidi % 12];
+    els.prompt.innerHTML = needsKeyContext(lv) ? ("Key of <strong>" + keyName + " major</strong>. Listen…") : "Listen…";
+    var ctxDur = needsKeyContext(lv) ? playContext(full) : 0;
     var totalDur = playSequence(ctxDur);
+    var myRound = ++roundSeq;
     setTimeout(function () {
-      var what = lv.type === "melody" ? ("Play back all <strong>" + targetSeq.length + " notes</strong> by ear, in order.") : "Find that note by ear and <strong>play it</strong>.";
-      els.prompt.innerHTML = what;
+      if (myRound !== roundSeq) return; // a newer round/level started during the cue
+      els.prompt.innerHTML = listenPrompt(lv);
       state = "listening";
-      renderPendingMarks();
+      renderPending();
       setRoundButtons({ during: true, next: false });
+      showSubmit(isChordType(lv));
     }, Math.round(totalDur * 1000) + 200);
   }
 
-  function renderPendingMarks() {
-    if (LEVELS[currentLevelIdx].type !== "melody") { setFeedbackHtml("", "neutral"); return; }
-    var marks = targetSeq.map(function (_, i) { return i < playedSeq.length ? "●" : "○"; });
-    setFeedbackHtml('<span class="marks mark-pending">' + marks.join(" ") + "</span>", "neutral");
+  function renderPending() {
+    var lv = LEVELS[currentLevelIdx];
+    if (lv.type === "melody") {
+      var marks = targetSeq.map(function (_, i) { return i < playedSeq.length ? "●" : "○"; });
+      setFeedbackHtml('<span class="marks mark-pending">' + marks.join(" ") + "</span>", "neutral");
+    } else if (isChordType(lv)) {
+      renderChordPending();
+    } else {
+      setFeedbackHtml("", "neutral");
+    }
+  }
+  function renderChordPending() {
+    var total = chordCount();
+    var done = playedChords.length;
+    var dots = [];
+    for (var i = 0; i < total; i++) dots.push(i < done ? "●" : "○");
+    var building = pendingChord.length
+      ? (" building: " + pendingChord.map(function (m) { return NOTE_NAMES[m % 12]; }).join("+"))
+      : "";
+    var head = total > 1 ? ('<span class="marks mark-pending">' + dots.join(" ") + "</span> chord " + (done + 1) + "/" + total) : "play the chord";
+    setFeedbackHtml(head + building, "neutral");
   }
 
-  function handleNoteOn(midi) {
+  function handleNoteOn(midi, source) {
     flashKey(midi);
     if (state === "listening") {
       playTone(midi, audio().currentTime + 0.01, 0.5, 0.8); // monitor
-      playedSeq.push(midi);
-      renderPendingMarks();
-      if (playedSeq.length >= targetSeq.length) gradeAttempt();
+      if (isChordType(LEVELS[currentLevelIdx])) {
+        onChordNote(midi, source);
+      } else {
+        playedSeq.push(midi);
+        renderPending();
+        if (playedSeq.length >= targetSeq.length) gradeAttempt();
+      }
     } else {
       playTone(midi, audio().currentTime + 0.01, 0.7, 0.8); // free play
+    }
+  }
+
+  // ---------- chord capture ----------
+  function clearChordTimer() { if (chordTimer) { clearTimeout(chordTimer); chordTimer = null; } }
+  // Live capture: each MIDI note re-arms a CHORD_WINDOW_MS trailing-edge timer, so notes within
+  // the window join one chord - the real-time equivalent of the unit-tested core.groupNotesByGap.
+  function onChordNote(midi, source) {
+    if (pendingChord.indexOf(midi) === -1) pendingChord.push(midi);
+    renderChordPending();
+    if (source === "midi") {               // auto-finalize a fast simultaneous gesture
+      clearChordTimer();
+      chordTimer = setTimeout(finalizeChord, CHORD_WINDOW_MS);
+    }
+    // non-MIDI (click/computer): the user finalizes with the Submit button
+  }
+  function finalizeChord() {
+    clearChordTimer();
+    if (!pendingChord.length) return;
+    playedChords.push(pendingChord.slice());
+    pendingChord = [];
+    var total = chordCount();
+    if (playedChords.length >= total) gradeChordAttempt();
+    else renderChordPending();
+  }
+
+  // ---------- shared scoring / feedback ----------
+  function markSpan(ok) { return '<span class="' + (ok ? "mark-ok" : "mark-bad") + '">' + (ok ? "✓" : "✗") + "</span>"; }
+  function qualityWord(q) { return q === "maj" ? "major" : q === "min" ? "minor" : "diminished"; }
+  function degOrName(m) { return DEGREE_LABEL[m - tonicMidi] || NOTE_NAMES[m % 12]; }
+  function axisRoman() { return C.AXIS_DEGREES.map(C.romanNumeral).join("-"); }
+  function chordCount() { return targetChords ? targetChords.length : 1; }
+  function chordName() {
+    var lv = LEVELS[currentLevelIdx];
+    var rootName = NOTE_NAMES[targetChords[0][0] % 12];
+    if (lv.itemKind === "quality") return rootName + " " + qualityWord(currentItem);
+    return C.romanNumeral(currentItem) + " (" + rootName + " " + qualityWord(C.diatonicQuality(currentItem)) + ")";
+  }
+  function degreeDetail(allCorrect, anyOctaveOff) {
+    var deg = degOrName(targetSeq[0]);
+    var sol = SOLFEGE[targetSeq[0] - tonicMidi] || "";
+    if (allCorrect) return (anyOctaveOff ? "Right note (octave off). " : "Correct! ") + "Scale degree " + deg + (sol ? " (" + sol + ")" : "") + ".";
+    return "You played " + NOTE_NAMES[playedSeq[0] % 12] + ". It was degree " + deg + (sol ? " (" + sol + ")" : "") + ".";
+  }
+  function melodyDetail(allCorrect) {
+    var degSeq = targetSeq.map(degOrName).join(" ");
+    return allCorrect ? ("Nice! Melody was " + degSeq + ".") : ("Melody was " + degSeq + ". Listen and try again, or Reveal.");
+  }
+  function chordDetail(correct) {
+    var name = chordName();
+    return correct ? ("Correct! It was " + name + ".") : ("It was " + name + ". Listen and try again, or Reveal.");
+  }
+  function progressionDetail(correct) {
+    var names = axisRoman();
+    return correct ? ("Nice! Progression was " + names + ".") : ("Progression was " + names + ". Listen and try again, or Reveal.");
+  }
+
+  function scoreRound(allCorrect) {
+    var lv = LEVELS[currentLevelIdx], lp = levelProgress(lv.id);
+    session.total++;
+    if (allCorrect) { session.correct++; session.streak++; if (session.streak > session.best) session.best = session.streak; }
+    else session.streak = 0;
+    lp.attempts++; if (allCorrect) lp.correct++;
+    if (usesLeitner(lv)) lp.boxes[currentItem] = C.promoteBox(lp.boxes[currentItem], allCorrect, MAX_BOX);
+    else { lp.recent.push(allCorrect); if (lp.recent.length > 200) lp.recent = lp.recent.slice(-200); }
+    saveProgress(); updateScoreboard(); checkUnlock();
+  }
+
+  function showAttemptFeedback(allCorrect, marks, detail) {
+    var prefix = allCorrect ? (attempts > 1 ? "Got it (round counted as a miss). " : "") : "";
+    setFeedbackHtml('<span class="marks">' + marks.join(" ") + '</span><br>' + (allCorrect ? "✓ " : "✗ ") + prefix + detail, allCorrect ? "good" : "bad");
+    renderProgress();
+    if (allCorrect) {
+      state = "feedback"; highlightTargets(); showSubmit(false);
+      setRoundButtons({ during: false, next: true });
+    } else {
+      resetAttemptInput();
+      if (isChordType(LEVELS[currentLevelIdx])) renderChordPending();
+      state = "listening";
+      setRoundButtons({ during: true, next: true });
+      showSubmit(isChordType(LEVELS[currentLevelIdx]));
     }
   }
 
   function gradeAttempt() {
     attempts++;
     var lv = LEVELS[currentLevelIdx];
-    var lp = levelProgress(lv.id);
     var g = C.gradeSequence(playedSeq, targetSeq);
-    var allCorrect = g.allCorrect;
-    var anyOctaveOff = g.anyOctaveOff;
-    var marks = g.marks.map(function (ok) {
-      return '<span class="' + (ok ? "mark-ok" : "mark-bad") + '">' + (ok ? "✓" : "✗") + "</span>";
-    });
+    var marks = g.marks.map(markSpan);
+    if (attempts === 1) scoreRound(g.allCorrect);
+    var detail = lv.type === "degree" ? degreeDetail(g.allCorrect, g.anyOctaveOff) : melodyDetail(g.allCorrect);
+    showAttemptFeedback(g.allCorrect, marks, detail);
+  }
 
-    // Score the round ONCE, on the first attempt only.
-    if (attempts === 1) {
-      session.total++;
-      if (allCorrect) {
-        session.correct++; session.streak++;
-        if (session.streak > session.best) session.best = session.streak;
-      } else {
-        session.streak = 0;
-      }
-      lp.attempts++;
-      if (allCorrect) lp.correct++;
-      // Leitner update (degree levels) on first attempt
-      if (lv.type === "degree") {
-        var item = targetSeq[0] - tonicMidi;
-        lp.boxes[item] = C.promoteBox(lp.boxes[item], allCorrect, MAX_BOX);
-      } else {
-        lp.recent.push(allCorrect);
-        if (lp.recent.length > 200) lp.recent = lp.recent.slice(-200);
-      }
-      saveProgress();
-      updateScoreboard();
-      checkUnlock();
-    }
-
-    // feedback text
-    var detail;
-    if (lv.type === "degree") {
-      var deg = DEGREE_LABEL[targetSeq[0] - tonicMidi] || NOTE_NAMES[targetSeq[0] % 12];
-      var sol = SOLFEGE[targetSeq[0] - tonicMidi] || "";
-      if (allCorrect) {
-        detail = (anyOctaveOff ? "Right note (octave off). " : "Correct! ") + "Scale degree " + deg + (sol ? " (" + sol + ")" : "") + ".";
-      } else {
-        detail = "You played " + NOTE_NAMES[playedSeq[0] % 12] + ". It was degree " + deg + (sol ? " (" + sol + ")" : "") + ".";
-      }
+  function gradeChordAttempt() {
+    attempts++;
+    var lv = LEVELS[currentLevelIdx];
+    var allCorrect, marks, detail;
+    if (lv.type === "progression") {
+      var gp = C.gradeProgression(playedChords, targetChords);
+      allCorrect = gp.allCorrect;
+      marks = gp.marks.map(markSpan);
+      detail = progressionDetail(allCorrect);
     } else {
-      var degSeq = targetSeq.map(function (m) { return DEGREE_LABEL[m - tonicMidi] || NOTE_NAMES[m % 12]; }).join(" ");
-      detail = allCorrect ? ("Nice! Melody was " + degSeq + ".") : ("Melody was " + degSeq + ". Listen and try again, or Reveal.");
+      var res = C.gradeChord(playedChords[0], targetChords[0]);
+      allCorrect = res.correct;
+      marks = [markSpan(allCorrect)];
+      detail = chordDetail(allCorrect);
     }
-    var prefix = allCorrect ? (attempts > 1 ? "Got it (round counted as a miss). " : "") : "";
-    var kind = allCorrect ? "good" : "bad";
-    setFeedbackHtml('<span class="marks">' + marks.join(" ") + '</span><br>' + (allCorrect ? "✓ " : "✗ ") + prefix + detail, kind);
-
-    renderProgress();
-    if (allCorrect) {
-      state = "feedback";
-      highlightTargets();
-      setRoundButtons({ during: false, next: true });
-    } else {
-      // allow another try without recounting; reset input
-      playedSeq = [];
-      state = "listening";
-      setRoundButtons({ during: true, next: true });
-    }
+    if (attempts === 1) scoreRound(allCorrect);
+    showAttemptFeedback(allCorrect, marks, detail);
   }
 
   function redoAttempt() {
     if (state !== "listening" && state !== "feedback") return;
-    playedSeq = [];
+    resetAttemptInput();
     clearTargets();
     state = "cued";
     setRoundButtons({ during: false, next: false });
-    var ctxDur = playContext(false);
+    showSubmit(false);
+    var lv = LEVELS[currentLevelIdx];
+    var ctxDur = needsKeyContext(lv) ? playContext(false) : 0;
     var totalDur = playSequence(ctxDur);
+    var myRound = ++roundSeq;
     setTimeout(function () {
-      renderPendingMarks();
+      if (myRound !== roundSeq) return; // a newer round/level started during the cue
+      renderPending();
       state = "listening";
-      setRoundButtons({ during: true, next: state === "feedback" });
+      setRoundButtons({ during: true, next: false });
+      showSubmit(isChordType(lv));
     }, Math.round(totalDur * 1000) + 200);
   }
 
+  function answerText(lv) {
+    if (lv.type === "progression") {
+      return axisRoman() + "  (" + targetChords.map(function (ch) { return NOTE_NAMES[ch[0] % 12]; }).join(" ") + ")";
+    }
+    if (lv.type === "chord") return chordName();
+    var degSeq = targetSeq.map(degOrName).join(" ");
+    var names = targetSeq.map(function (m) { return NOTE_NAMES[m % 12]; }).join(" ");
+    return names + "  (degrees " + degSeq + ")";
+  }
   function reveal() {
     var lv = LEVELS[currentLevelIdx];
-    var lp = levelProgress(lv.id);
-    if (state === "listening" && attempts === 0) {
-      // count as a miss
-      session.total++; session.streak = 0;
-      lp.attempts++;
-      if (lv.type === "degree") {
-        var item = targetSeq[0] - tonicMidi;
-        lp.boxes[item] = 1;
-      } else {
-        lp.recent.push(false);
-      }
-      saveProgress(); updateScoreboard(); renderProgress();
-    }
+    clearChordTimer();
+    if (state === "listening" && attempts === 0) { attempts = 1; scoreRound(false); } // count as a miss, once
+    renderProgress();
     highlightTargets();
-    var degSeq = targetSeq.map(function (m) { return (DEGREE_LABEL[m - tonicMidi] || NOTE_NAMES[m % 12]); }).join(" ");
-    var names = targetSeq.map(function (m) { return NOTE_NAMES[m % 12]; }).join(" ");
-    setFeedbackHtml("Answer: " + names + "  (degrees " + degSeq + ")", "neutral");
-    // replay
-    state = "cued"; playSequence(0.0);
-    state = "feedback";
+    setFeedbackHtml("Answer: " + answerText(lv), "neutral");
+    state = "cued"; playSequence(0.0); state = "feedback";
+    showSubmit(false);
     setRoundButtons({ during: false, next: true });
   }
 
@@ -487,11 +608,13 @@
     if (!isUnlocked(idx)) return;
     currentLevelIdx = idx;
     state = "idle";
-    targetSeq = []; playedSeq = []; attempts = 0;
+    roundSeq++; // invalidate any in-flight cue timer from the previous level
+    targetSeq = []; targetChords = null; resetAttemptInput(); attempts = 0;
     session = { correct: 0, total: 0, streak: 0, best: 0 };
     updateScoreboard();
     clearTargets();
     setRoundButtons({ during: false, next: false });
+    showSubmit(false);
     els.startBtn.textContent = "Start level";
     els.prompt.innerHTML = "Level <strong>" + LEVELS[idx].name + "</strong> selected. Press <strong>Start level</strong>.";
     setFeedbackHtml("", "neutral");
@@ -522,7 +645,7 @@
         }
         inputs.forEach(function (input) {
           input.onmidimessage = function (msg) {
-            var d = msg.data; if ((d[0] & 0xf0) === 0x90 && d[2] > 0) handleNoteOn(d[1]);
+            var d = msg.data; if ((d[0] & 0xf0) === 0x90 && d[2] > 0) handleNoteOn(d[1], "midi");
           };
         });
       }
@@ -544,7 +667,7 @@
     document.addEventListener("keydown", function (e) {
       if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       var k = e.key.toLowerCase();
-      if (COMPUTER_KEYS.hasOwnProperty(k) && !held[k]) { held[k] = true; handleNoteOn(COMPUTER_KEYS[k]); }
+      if (COMPUTER_KEYS.hasOwnProperty(k) && !held[k]) { held[k] = true; handleNoteOn(COMPUTER_KEYS[k], "computer"); }
     });
     document.addEventListener("keyup", function (e) { delete held[e.key.toLowerCase()]; });
   }
@@ -564,6 +687,11 @@
     els.replayKeyBtn.addEventListener("click", function () { playContext(true); });
     els.hearAgainBtn.addEventListener("click", function () { playSequence(0.0); });
     els.redoBtn.addEventListener("click", redoAttempt);
+    els.submitBtn.addEventListener("click", function () {
+      if (state !== "listening") return;
+      if (!pendingChord.length) { toast("Play the chord first, then Submit."); return; }
+      finalizeChord();
+    });
     els.revealBtn.addEventListener("click", reveal);
     els.nextBtn.addEventListener("click", function () { newRound(false); });
     initComputerKeys();
@@ -579,7 +707,13 @@
     selectLevel: selectLevel,
     play: function (m) { handleNoteOn(m); },
     playSeq: function (arr) { arr.forEach(function (m) { handleNoteOn(m); }); },
+    // play a chord's notes then finalize it deterministically (for tests/non-MIDI)
+    playChord: function (notes) { notes.forEach(function (n) { handleNoteOn(n, "screen"); }); finalizeChord(); },
+    submitChord: function () { finalizeChord(); },
+    midiNote: function (m) { handleNoteOn(m, "midi"); }, // exercises the 75ms debounce path
     getTargets: function () { return targetSeq.slice(); },
+    getTargetChords: function () { return targetChords ? targetChords.map(function (c) { return c.slice(); }) : null; },
+    getCurrentItem: function () { return currentItem; },
     getTonic: function () { return tonicMidi; },
     getState: function () { return state; },
     getSession: function () { return session; },

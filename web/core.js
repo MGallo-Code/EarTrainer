@@ -24,6 +24,8 @@
   function noteName(m) { return NOTE_NAMES[pc(m)]; }
   function isBlack(m) { var p = pc(m); return p === 1 || p === 3 || p === 6 || p === 8 || p === 10; }
   function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
+  // Fold a note into [lo,hi] by octaves (same pitch class) - for displaying out-of-range chord tones.
+  function foldToRange(m, lo, hi) { while (m > hi) m -= 12; while (m < lo) m += 12; return m; }
   function degreeLabel(deg) { return DEGREE_LABEL.hasOwnProperty(deg) ? DEGREE_LABEL[deg] : null; }
   function solfege(deg) { return SOLFEGE.hasOwnProperty(deg) ? SOLFEGE[deg] : null; }
 
@@ -120,17 +122,99 @@
     return { allCorrect: allCorrect, marks: marks, anyOctaveOff: anyOctaveOff };
   }
 
+  // ---------- chords / harmony ----------
+  // Verified: triad semitone offsets and diatonic qualities (see CHORDS-SPEC.md).
+  var TRIAD_INTERVALS = { maj: [0, 4, 7], min: [0, 3, 7], dim: [0, 3, 6] };
+  var DIATONIC_QUALITIES = ["maj", "min", "min", "maj", "maj", "min", "dim"]; // I..vii in major
+  var ROMAN = ["I", "ii", "iii", "IV", "V", "vi", "vii°"];
+  var AXIS_DEGREES = [0, 4, 5, 3]; // I-V-vi-IV (degree indices, 0-based)
+
+  function triad(rootMidi, quality) {
+    return TRIAD_INTERVALS[quality].map(function (iv) { return rootMidi + iv; });
+  }
+  function diatonicQuality(degIdx) { return DIATONIC_QUALITIES[((degIdx % 7) + 7) % 7]; }
+  function romanNumeral(degIdx) { return ROMAN[((degIdx % 7) + 7) % 7]; }
+  // Root-position diatonic triad: stack scale members at indices deg, deg+2, deg+4 (with octave wrap).
+  function diatonicTriad(tonicMidi, degIdx) {
+    var notes = [];
+    for (var k = 0; k < 6; k += 2) {
+      var idx = degIdx + k;
+      var oct = Math.floor(idx / 7);
+      notes.push(tonicMidi + MAJOR_SCALE[((idx % 7) + 7) % 7] + 12 * oct);
+    }
+    return notes;
+  }
+  function axisChords(tonicMidi) {
+    return AXIS_DEGREES.map(function (di) { return diatonicTriad(tonicMidi, di); });
+  }
+
+  // distinct pitch classes, sorted ascending
+  function pcSet(notes) {
+    var seen = {}, out = [];
+    for (var i = 0; i < notes.length; i++) {
+      if (notes[i] == null) continue;
+      var p = pc(notes[i]);
+      if (!seen[p]) { seen[p] = 1; out.push(p); }
+    }
+    return out.sort(function (a, b) { return a - b; });
+  }
+  function setsEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (var i = 0; i < a.length; i++) if (a[i] !== b[i]) return false;
+    return true;
+  }
+  // Inversion/octave tolerant: the played pitch-class set must equal the target's exactly.
+  function gradeChord(played, target) {
+    var p = pcSet(played), t = pcSet(target);
+    return { correct: t.length > 0 && setsEqual(p, t), playedSet: p, targetSet: t };
+  }
+  // Ordered: each chord graded by set equality, in sequence.
+  function gradeProgression(playedChords, targetChords) {
+    var marks = [], all = targetChords.length > 0;
+    for (var i = 0; i < targetChords.length; i++) {
+      var ok = playedChords[i] ? gradeChord(playedChords[i], targetChords[i]).correct : false;
+      marks.push(ok);
+      if (!ok) all = false;
+    }
+    return { allCorrect: all, marks: marks };
+  }
+
+  // Group a timestamped note-on stream into chords: notes within windowMs of the
+  // previous note join the same chord; a larger gap starts a new chord. Dedupes
+  // repeated note numbers within a chord. events = [{ note, t }] (t in ms).
+  function groupNotesByGap(events, windowMs) {
+    var chords = [], cur = [], lastT = null;
+    function pushCur() { if (cur.length) chords.push(cur.slice()); }
+    for (var i = 0; i < events.length; i++) {
+      var e = events[i];
+      if (lastT === null || (e.t - lastT) <= windowMs) {
+        if (cur.indexOf(e.note) === -1) cur.push(e.note);
+      } else {
+        pushCur(); cur = [e.note];
+      }
+      lastT = e.t;
+    }
+    pushCur();
+    return chords;
+  }
+
   return {
     NOTE_NAMES: NOTE_NAMES, DEGREE_LABEL: DEGREE_LABEL, SOLFEGE: SOLFEGE,
     MAJOR_SCALE: MAJOR_SCALE, MAJOR_KEYS: MAJOR_KEYS,
     KEYBOARD_LOW: KEYBOARD_LOW, KEYBOARD_HIGH: KEYBOARD_HIGH,
-    pc: pc, noteName: noteName, isBlack: isBlack, midiToFreq: midiToFreq,
+    TRIAD_INTERVALS: TRIAD_INTERVALS, DIATONIC_QUALITIES: DIATONIC_QUALITIES,
+    ROMAN: ROMAN, AXIS_DEGREES: AXIS_DEGREES,
+    pc: pc, noteName: noteName, isBlack: isBlack, midiToFreq: midiToFreq, foldToRange: foldToRange,
     degreeLabel: degreeLabel, solfege: solfege,
     generateMelodyDegrees: generateMelodyDegrees,
     leitnerWeights: leitnerWeights, pickWeighted: pickWeighted, promoteBox: promoteBox,
     rollingAccuracy: rollingAccuracy, isDegreeMastered: isDegreeMastered,
     degreeMasteryFraction: degreeMasteryFraction, isSeqMastered: isSeqMastered,
     seqMasteryFraction: seqMasteryFraction,
-    gradeNote: gradeNote, gradeSequence: gradeSequence
+    gradeNote: gradeNote, gradeSequence: gradeSequence,
+    triad: triad, diatonicQuality: diatonicQuality, romanNumeral: romanNumeral,
+    diatonicTriad: diatonicTriad, axisChords: axisChords,
+    pcSet: pcSet, gradeChord: gradeChord, gradeProgression: gradeProgression,
+    groupNotesByGap: groupNotesByGap
   };
 });
