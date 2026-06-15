@@ -269,6 +269,14 @@
     var lv = LEVELS[currentLevelIdx];
     var detail = "You practiced " + lv.name + ": " + session.correct + "/" + session.total + " correct.";
     if (progress.daily.goalMetToday) detail += " Daily goal met (" + progress.daily.goalTarget + " items).";
+    if (usesLeitner(lv)) {
+      var lp = levelProgress(lv.id);
+      var weak = C.weakestFirst(levelItems(lv), lp.boxes)
+        .filter(function (it) { return (lp.boxes[it] || 1) < MASTER_BOX; })
+        .slice(0, 3)
+        .map(function (it) { return itemLabel(lv, it); });
+      if (weak.length) detail += " Focus next: " + weak.join(", ") + ".";
+    }
     els.recapDetail.textContent = detail;
   }
   function openRecap(auto) { renderRecap(auto); showWaitlist(false); els.recapOverlay.style.display = "flex"; }
