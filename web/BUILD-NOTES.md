@@ -26,6 +26,7 @@ loop is the separate, gated bet). See `../research/execution/05-integrated-plan.
 | Rhythm-before-pitch (noted) | Melody grading is pitch-sequence for now; rhythm sub-score is a TODO | `execution/05`: scaffold/grade rhythm first, then pitch (only direction with proven gain) |
 | Progress persistence | localStorage per level (boxes, attempts, rolling results) | Habit/retention (streaks, continuity) - `execution/03` retention |
 | 2-octave input | Computer keys now span both rendered octaves (Z-row lower, Q-row upper) | UX consistency fix (the rendered keyboard is 2 octaves) |
+| Sampled piano sound | smplr SplendidGrandPiano (Steinway, MIT) via esm.sh, loads on first Start, with synth fallback when offline | `research/05-tech-web-mvp.md` (smplr SplendidGrandPiano, 4 velocity layers, MIT) |
 
 ## Decisions made (committing, per "you take the reins")
 
@@ -50,8 +51,9 @@ These are flagged by the research itself as undocumented and needing our own tun
 3. **Rhythm grading for melodies.** Deferred. Needs a timing-capture design that works
    for click/computer input (MIDI gives clean timestamps; mouse/keys are noisier).
 4. **FSRS upgrade.** When we have per-user history, swap Leitner -> FSRS.
-5. **smplr sound upgrade.** Still the built-in synth; smplr SplendidGrandPiano is the
-   planned swap (`research/05-tech-web-mvp.md`).
+5. **smplr sound - DONE (2026-06-15).** smplr SplendidGrandPiano (Steinway, MIT) wired
+   in via esm.sh with a synth fallback when samples can't load. Loads on first Start.
+   Open: pin a version and self-host samples for offline/iOS reliability later.
 6. **Cold-start, copyright, iOS, unit economics.** Product-level risks from
    `execution/10-critique.md` - out of scope for the drill core, tracked for the duet
    loop and business model.

@@ -37,6 +37,7 @@
           <option value="11">B major</option>
         </select>
       </div>
+      <span id="soundState" class="sound-state">Sound: synth</span>
       <button id="startBtn" class="btn btn--primary">Start level</button>
     </section>
 
@@ -85,7 +86,7 @@
   <div id="toast" class="toast" aria-live="polite"></div>
 
   <footer class="app-footer">
-    <p>Grading is by scale degree (any octave of the right note counts; exact octave noted). Spaced repetition uses the Leitner system; difficulty targets the 85% rule. Sound is a built-in synth for this prototype; smplr Steinway samples are the planned upgrade. See BUILD-NOTES.md.</p>
+    <p>Grading is by scale degree (any octave of the right note counts; exact octave noted). Spaced repetition uses the Leitner system; difficulty targets the 85% rule. Sound uses smplr SplendidGrandPiano (Steinway) samples, with a built-in synth fallback if offline. See BUILD-NOTES.md.</p>
   </footer>
 
   <script src="app.js"></script>

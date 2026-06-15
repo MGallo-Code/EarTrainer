@@ -67,8 +67,30 @@
     return ctx;
   }
   function midiToFreq(m) { return 440 * Math.pow(2, (m - 69) / 12); }
-  function playTone(midi, when, dur, vel) {
-    var ac = audio(); var t0 = when; vel = vel == null ? 0.85 : vel;
+
+  // Sampled Steinway (smplr) with a built-in synth fallback if samples can't load.
+  var piano = null, pianoState = "off"; // off | loading | ready | failed
+  function setSoundNote() {
+    if (!els.soundState) return;
+    var map = { off: "Sound: synth", loading: "Sound: loading Steinway…", ready: "Sound: Steinway", failed: "Sound: synth (offline)" };
+    els.soundState.textContent = map[pianoState] || "Sound: synth";
+    els.soundState.className = "sound-state" + (pianoState === "ready" ? " ready" : "");
+  }
+  function initPiano() {
+    if (pianoState !== "off") return;
+    pianoState = "loading"; setSoundNote();
+    import("https://esm.sh/smplr").then(function (mod) {
+      piano = new mod.SplendidGrandPiano(audio());
+      return piano.load;
+    }).then(function () {
+      pianoState = "ready"; setSoundNote(); toast("Steinway samples loaded.");
+    }).catch(function () {
+      piano = null; pianoState = "failed"; setSoundNote();
+    });
+  }
+
+  function playSynth(midi, when, dur, vel) {
+    var ac = audio(); var t0 = when;
     var master = ac.createGain(); master.connect(ac.destination);
     var partials = [{ m: 1, g: 1 }, { m: 2, g: 0.45 }, { m: 3, g: 0.22 }, { m: 4, g: 0.1 }];
     var freq = midiToFreq(midi);
@@ -81,6 +103,15 @@
     master.gain.setValueAtTime(0.0001, t0);
     master.gain.linearRampToValueAtTime(peak, t0 + 0.006);
     master.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  }
+
+  function playTone(midi, when, dur, vel) {
+    vel = vel == null ? 0.85 : vel;
+    if (pianoState === "ready" && piano) {
+      try { piano.start({ note: midi, time: when, duration: dur, velocity: Math.round(vel * 127) }); return; }
+      catch (e) { /* fall back to synth */ }
+    }
+    playSynth(midi, when, dur, vel);
   }
   function majorTriad(root) { return [root, root + 4, root + 7]; }
   function playChord(midis, when, dur) { for (var i = 0; i < midis.length; i++) playTone(midis[i], when, dur, 0.7); }
@@ -118,7 +149,8 @@
      "replayKeyBtn", "hearAgainBtn", "redoBtn", "revealBtn", "nextBtn",
      "accuracy", "streak", "best", "count", "keyboard",
      "masteryPct", "masteryBar", "masteryDetail", "rollingPct", "rollingBar", "leitnerDetail",
-     "toast"].forEach(function (id) { els[id] = $(id); });
+     "toast", "soundState"].forEach(function (id) { els[id] = $(id); });
+    setSoundNote();
   }
   function setStatus(text, on) { els.status.textContent = text; els.status.className = "status " + (on ? "status--on" : "status--off"); }
   function setFeedbackHtml(html, kind) { els.feedback.innerHTML = html; els.feedback.className = "feedback" + (kind ? " " + kind : ""); }
@@ -335,6 +367,7 @@
 
   function startLevel() {
     if (audio().resume) audio().resume();
+    initPiano(); // load Steinway samples on first user gesture
     session = { correct: 0, total: 0, streak: 0, best: 0 };
     updateScoreboard();
     chooseKey(); // set the key once at start (random re-rolls per round in newRound)

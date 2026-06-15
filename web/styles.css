@@ -54,7 +54,13 @@ select {
   background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
   border-radius: 10px; padding: 10px 12px; font-size: 1rem; min-width: 180px;
 }
-.controls .btn--primary { margin-left: auto; }
+.controls .btn--primary { margin-left: 12px; }
+.sound-state {
+  align-self: center; margin-left: auto; font-size: 0.78rem; color: var(--muted);
+  background: var(--panel-2); border: 1px solid var(--line); padding: 6px 10px;
+  border-radius: 999px; white-space: nowrap;
+}
+.sound-state.ready { color: var(--accent-2); border-color: #1f5a45; }
 
 .btn {
   background: var(--panel-2); color: var(--ink); border: 1px solid var(--line);
