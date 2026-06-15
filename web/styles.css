@@ -181,6 +181,15 @@ select {
 }
 .waitlist-thanks { color: var(--good); font-weight: 700; margin: 6px 0; }
 
+/* onboarding */
+.onboard-card { max-width: 480px; width: 100%; }
+.onboard-card h2 { margin: 0 0 10px; font-size: 1.6rem; }
+.onboard-lead { color: var(--ink); font-size: 1.02rem; line-height: 1.55; margin: 0 0 16px; }
+.onboard-lead em { color: var(--accent-2); font-style: normal; }
+.onboard-list { text-align: left; margin: 0 0 20px; padding-left: 22px; }
+.onboard-list li { color: var(--muted); font-size: 0.96rem; line-height: 1.5; margin-bottom: 10px; }
+.onboard-list strong { color: var(--ink); }
+
 /* settings */
 .settings-card { max-width: 440px; width: 100%; }
 .settings-card h2 { margin: 0 0 16px; font-size: 1.4rem; }

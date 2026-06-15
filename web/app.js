@@ -81,6 +81,7 @@
     if (!progress.settings) progress.settings = {};
     if (typeof progress.settings.tempo !== "number") progress.settings.tempo = 1;     // playback speed multiplier
     if (!progress.settings.cadence) progress.settings.cadence = "full";               // "full" cadence or "quick" tonic
+    if (typeof progress.onboarded !== "boolean") progress.onboarded = false;
   }
 
   // ---------- state ----------
@@ -203,7 +204,8 @@
      "streakNum", "goalNum", "goalTarget", "goalRing", "recapBtn",
      "recapOverlay", "recapMain", "recapTitle", "recapAcc", "recapRounds", "recapStreak", "recapDetail",
      "duetBtn", "recapClose", "waitlistPanel", "waitlistEmail", "waitlistSubmit", "waitlistBack", "waitlistThanks",
-     "settingsBtn", "settingsOverlay", "settingsClose", "setGoal", "setCadence", "setTempo"
+     "settingsBtn", "settingsOverlay", "settingsClose", "setGoal", "setCadence", "setTempo",
+     "onboardOverlay", "onboardStart"
     ].forEach(function (id) { els[id] = $(id); });
     setSoundNote();
   }
@@ -278,6 +280,12 @@
     els.settingsOverlay.style.display = "flex";
   }
   function closeSettings() { els.settingsOverlay.style.display = "none"; }
+  function showOnboarding() { els.onboardOverlay.style.display = "flex"; }
+  function finishOnboarding() {
+    progress.onboarded = true; saveProgress();
+    els.onboardOverlay.style.display = "none";
+    startLevel(); // jump straight into the first round (this click is the audio-unlock gesture)
+  }
   function toast(msg) {
     els.toast.textContent = msg; els.toast.classList.add("show");
     setTimeout(function () { els.toast.classList.remove("show"); }, 2600);
@@ -833,8 +841,10 @@
     els.setGoal.addEventListener("change", function () { progress.daily.goalTarget = parseInt(els.setGoal.value, 10); saveProgress(); renderDaily(); });
     els.setCadence.addEventListener("change", function () { progress.settings.cadence = els.setCadence.value; saveProgress(); });
     els.setTempo.addEventListener("change", function () { progress.settings.tempo = parseFloat(els.setTempo.value); saveProgress(); });
+    els.onboardStart.addEventListener("click", finishOnboarding);
     initComputerKeys();
     initMIDI();
+    if (!progress.onboarded) showOnboarding(); // first-run welcome
   }
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init);
